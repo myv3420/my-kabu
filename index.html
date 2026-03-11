@@ -3,152 +3,154 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>株のやさしい相談室 v2.5</title>
+    <title>黄金ルール分析 - 記憶版</title>
     <style>
         body { margin: 0; background-color: #0d1117; color: #e6edf3; font-family: -apple-system, sans-serif; display: flex; flex-direction: column; height: 100vh; }
-        .header { padding: 15px; background: #161b22; border-bottom: 2px solid #2962ff; font-weight: bold; text-align: center; font-size: 1.1em; color: #58a6ff; }
+        .header { padding: 10px; background: #161b22; border-bottom: 1px solid #30363d; font-weight: bold; text-align: center; color: #58a6ff; display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; }
         
-        #chat-messages { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 15px; scroll-behavior: smooth; }
+        .tab-bar { display: flex; background: #161b22; border-bottom: 2px solid #30363d; }
+        .tab { flex: 1; padding: 12px; text-align: center; font-size: 13px; cursor: pointer; color: #8b949e; border-bottom: 3px solid transparent; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tab.active { color: #58a6ff; border-bottom: 3px solid #2962ff; background: rgba(88, 166, 255, 0.1); font-weight: bold; }
+
+        .chat-container { flex: 1; overflow-y: auto; padding: 15px; display: none; flex-direction: column; gap: 15px; scroll-behavior: smooth; }
+        .chat-container.active { display: flex; }
         
-        .ai-msg { background: #21262d; padding: 16px; border-radius: 20px 20px 20px 5px; border-left: 5px solid #2962ff; align-self: flex-start; max-width: 90%; white-space: pre-wrap; line-height: 1.7; font-size: 15px; color: #f0f6fc; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
-        
+        .ai-msg { background: #21262d; padding: 16px; border-radius: 20px 20px 20px 5px; border-left: 5px solid #2962ff; align-self: flex-start; max-width: 90%; white-space: pre-wrap; line-height: 1.7; font-size: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
         .user-msg { background: #238636; color: white; padding: 12px 18px; border-radius: 20px 20px 5px 20px; align-self: flex-end; max-width: 85%; font-size: 14px; font-weight: bold; }
         .preview-img { max-width: 100%; border-radius: 12px; margin-top: 10px; border: 2px solid #30363d; }
 
-        .controls { padding: 15px; background: #161b22; border-top: 1px solid #30363d; padding-bottom: calc(15px + env(safe-area-inset-bottom)); }
+        .controls { padding: 10px; background: #161b22; border-top: 1px solid #30363d; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+        .btn-clear { font-size: 11px; background: #da3633; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; }
         textarea { width: 100%; background: #0d1117; border: 1.5px solid #30363d; color: white; padding: 12px; border-radius: 15px; resize: none; font-size: 16px; outline: none; box-sizing: border-box; }
-        
         .action-btns { display: flex; gap: 10px; margin-top: 10px; }
-        .btn { flex: 1; padding: 14px; border-radius: 12px; border: none; font-weight: bold; font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: 0.2s; }
+        .btn { flex: 1; padding: 14px; border-radius: 12px; border: none; font-weight: bold; font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
         .btn-upload { background: #30363d; color: #e6edf3; }
         .btn-send { background: #2962ff; color: white; }
-        .btn:active { transform: scale(0.95); opacity: 0.8; }
-        
         #loading { display: none; text-align: center; font-size: 14px; color: #58a6ff; margin-bottom: 8px; font-weight: bold; }
-        #file-name { font-size: 12px; color: #aff5b4; margin-top: 5px; text-align: center; }
     </style>
 </head>
 <body>
 
-    <div class="header">📈 黄金ルール AI株分析</div>
-
-    <div id="chat-messages">
-        <div class="ai-msg">分析の準備ができています！📊✨<br>楽天証券のチャート画像を「画像を選ぶ」から送ってください。<br>「黄金ルール」を脳内で適用して、分かりやすく解説します！📈🔰</div>
+    <div class="header">
+        <span>📈 AI株分析</span>
+        <button class="btn-clear" onclick="clearAllData()">全消去</button>
     </div>
 
-    <div id="loading">画像をスキャンして黄金ルールを適用中...🔍✨</div>
+    <div class="tab-bar">
+        <div id="tab-A" class="tab active" onclick="switchTab('A')" ondblclick="renameTab('A')">銘柄A</div>
+        <div id="tab-B" class="tab" onclick="switchTab('B')" ondblclick="renameTab('B')">銘柄B</div>
+        <div id="tab-C" class="tab" onclick="switchTab('C')" ondblclick="renameTab('C')">銘柄C</div>
+    </div>
+
+    <div id="chat-A" class="chat-container active"></div>
+    <div id="chat-B" class="chat-container"></div>
+    <div id="chat-C" class="chat-container"></div>
+
+    <div id="loading">分析中...🔍✨</div>
 
     <div class="controls">
-        <textarea id="user-text" rows="2" placeholder="この銘柄の今後の展開は？など"></textarea>
-        <div id="file-name"></div>
+        <textarea id="user-text" rows="2" placeholder="分析のポイントを入力"></textarea>
         <div class="action-btns">
             <label class="btn btn-upload">
-                📸 画像を選ぶ
+                📸 画像
                 <input type="file" id="image-input" accept="image/*" style="display:none;">
             </label>
-            <button class="btn btn-send" onclick="handleSend()">分析スタート！</button>
+            <button class="btn btn-send" onclick="handleSend()">送信</button>
         </div>
     </div>
 
     <script>
         const API_KEY = 'AIzaSyBa2SEsc_y-ooTnXUwKjVORk8gvKOwtbsg';
+        let currentTab = 'A';
         let selectedFile = null;
 
-        document.getElementById('image-input').addEventListener('change', (e) => {
-            selectedFile = e.target.files[0];
-            document.getElementById('file-name').textContent = selectedFile ? "✅ 画像の準備ができました！" : "";
-        });
+        // 初期化：保存されたデータを読み込む
+        window.onload = () => {
+            ['A', 'B', 'C'].forEach(id => {
+                const savedChat = localStorage.getItem(`chatData-${id}`);
+                if (savedChat) document.getElementById(`chat-${id}`).innerHTML = savedChat;
+                
+                const savedName = localStorage.getItem(`tabName-${id}`);
+                if (savedName) document.getElementById(`tab-${id}`).innerText = savedName;
+            });
+            if (!document.getElementById('chat-A').innerHTML) {
+                document.getElementById('chat-A').innerHTML = '<div class="ai-msg">画像を分析してここに記録を残せます📈</div>';
+            }
+        };
+
+        function switchTab(id) {
+            currentTab = id;
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.chat-container').forEach(c => c.classList.remove('active'));
+            document.getElementById(`tab-${id}`).classList.add('active');
+            document.getElementById(`chat-${id}`).classList.add('active');
+        }
+
+        function renameTab(id) {
+            const newName = prompt("銘柄名を入力してください", document.getElementById(`tab-${id}`).innerText);
+            if (newName) {
+                document.getElementById(`tab-${id}`).innerText = newName;
+                localStorage.setItem(`tabName-${id}`, newName);
+            }
+        }
 
         async function handleSend() {
             const textInput = document.getElementById('user-text');
-            const messages = document.getElementById('chat-messages');
-            const loading = document.getElementById('loading');
-            
-            if (!selectedFile) {
-                alert("まずはチャートの画像を選んでくださいね！📸");
-                return;
-            }
+            const messages = document.getElementById(`chat-${currentTab}`);
+            if (!selectedFile) return alert("画像を選んでください📸");
 
-            const userText = textInput.value;
             const userDiv = document.createElement('div');
             userDiv.className = 'user-msg';
-            userDiv.textContent = userText || "このチャートを分析して！";
-            
+            userDiv.textContent = textInput.value || "分析して！";
             const img = document.createElement('img');
             img.className = 'preview-img';
             img.src = URL.createObjectURL(selectedFile);
             userDiv.appendChild(img);
-            
             messages.appendChild(userDiv);
-            textInput.value = "";
-            loading.style.display = 'block';
             
+            document.getElementById('loading').style.display = 'block';
             messages.scrollTop = messages.scrollHeight;
 
             try {
-                const prompt = `あなたは投資初心者に対して、非常に分かりやすく教えるプロのテクニカルアナリストです。
-挨拶や自己紹介は一切不要です。すぐに画像の内容に基づいた分析を開始してください。
-
-【厳守する分析ルール】
-画像に表示されていない以下の指標（GMMA、先行MA、RSI MA、ボリバン、抵抗線、価格帯別出来高）を画像から推測し、もし表示されていたら今どんな状態か、初心者にもイメージしやすい言葉で解説してください。
-
-【回答の構成】
-1. 現在のトレンドの状態（上向き？下向き？様子見？）📈📉
-2. 各黄金ルールの指標からの読み取り（絵文字を使い、分かりやすく！）
-3. 具体的な戦略（「損切りは〇〇円」「利確は〇〇円」と明記）
-4. 最後の一言アドバイス💡
-
-質問：${userText}`;
-
-                let contents = [{
-                    parts: [
-                        { text: prompt },
-                        { inline_data: { mime_type: selectedFile.type, data: (await toBase64(selectedFile)).split(',')[1] } }
-                    ]
-                }];
-
+                const prompt = `投資初心者向けに、挨拶抜きで分析してください。黄金ルール（GMMA、先行MA、RSI MA、ボリバン、抵抗線、価格帯別出来高）を脳内合成して解説し、損切り・利確価格を出して。`;
+                const base64 = (await toBase64(selectedFile)).split(',')[1];
+                
                 const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents: contents })
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: selectedFile.type, data: base64 } }] }] })
                 });
 
                 const data = await response.json();
-                if (data.error) throw new Error(data.error.message);
-
-                const aiResponse = data.candidates[0].content.parts[0].text;
-                
                 const aiDiv = document.createElement('div');
                 aiDiv.className = 'ai-msg';
-                aiDiv.textContent = aiResponse;
-                
-                const scrollPos = messages.scrollHeight;
+                aiDiv.textContent = data.candidates[0].content.parts[0].text;
                 messages.appendChild(aiDiv);
                 
-                // 回答の先頭が表示されるようにスクロール
-                messages.scrollTo({
-                    top: scrollPos - 20,
-                    behavior: 'smooth'
-                });
+                // データを保存！
+                localStorage.setItem(`chatData-${currentTab}`, messages.innerHTML);
 
-            } catch (error) {
-                const errorDiv = document.createElement('div');
-                errorDiv.className = 'ai-msg';
-                errorDiv.textContent = '通信エラーが発生しました💦 もう一度試してみてください。';
-                messages.appendChild(errorDiv);
-            } finally {
-                loading.style.display = 'none';
+            } catch (e) { alert("エラーが発生しました💦"); }
+            finally {
+                document.getElementById('loading').style.display = 'none';
                 selectedFile = null;
-                document.getElementById('file-name').textContent = "";
+                textInput.value = "";
+                messages.scrollTop = messages.scrollHeight;
             }
         }
 
-        const toBase64 = file => new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = e => reject(e);
+        function clearAllData() {
+            if (confirm("全ての記録を消去しますか？")) {
+                localStorage.clear();
+                location.reload();
+            }
+        }
+
+        const toBase64 = f => new Promise((r, j) => {
+            const rd = new FileReader(); rd.readAsDataURL(f);
+            rd.onload = () => r(rd.result); rd.onerror = e => j(e);
         });
+        document.getElementById('image-input').addEventListener('change', (e) => selectedFile = e.target.files[0]);
     </script>
 </body>
 </html>
