@@ -415,15 +415,48 @@
 
         try {
             const prompt = `あなたは「黄金ルール」の投資顧問です。銘柄：${currentStock.name} (${currentStock.code}) のチャート画像から、GMMA、ボリンジャーバンド、RSI等のテクニカル指標を読み取り、今後の予測と戦略をズバッと回答してください。`;
+            const base64 = await toBase64(selectedChatFile);
+            const mimeType = selectedChatFile.type || 'image/jpeg';
             const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: selectedChatFile.type, data: (await toBase64(selectedChatFile)).split(',')[1] } }] }] })
+                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: mimeType, data: base64.split(',')[1] } }] }] })
             });
             const data = await response.json();
-            const aiDiv = document.createElement('div'); aiDiv.className = 'ai-msg'; aiDiv.textContent = data.candidates[0].content.parts[0].text;
+
+            // APIレベルのエラーを捕捉
+            if (!response.ok || data.error) {
+                const errMsg = data.error?.message || `HTTP ${response.status}`;
+                const errDiv = document.createElement('div');
+                errDiv.className = 'ai-msg';
+                errDiv.style.borderLeftColor = '#f85149';
+                errDiv.textContent = `⚠️ APIエラー：${errMsg}`;
+                messages.appendChild(errDiv);
+                return;
+            }
+
+            // candidates が空のケース（Safety フィルター等）
+            if (!data.candidates || data.candidates.length === 0) {
+                const reason = data.promptFeedback?.blockReason || '不明';
+                const errDiv = document.createElement('div');
+                errDiv.className = 'ai-msg';
+                errDiv.style.borderLeftColor = '#f0883e';
+                errDiv.textContent = `⚠️ 応答を受け取れませんでした（理由: ${reason}）\nチャート画像を変えて再試行してください。`;
+                messages.appendChild(errDiv);
+                return;
+            }
+
+            const aiDiv = document.createElement('div');
+            aiDiv.className = 'ai-msg';
+            aiDiv.textContent = data.candidates[0].content.parts[0].text;
             messages.appendChild(aiDiv);
-        } catch (e) { alert("エラーが発生しました💦"); }
+        } catch (e) {
+            const errDiv = document.createElement('div');
+            errDiv.className = 'ai-msg';
+            errDiv.style.borderLeftColor = '#f85149';
+            errDiv.textContent = `⚠️ 通信エラー：${e.message}\nネットワーク接続を確認してください。`;
+            messages.appendChild(errDiv);
+        }
         finally {
             loading.style.display = 'none';
             selectedChatFile = null;
