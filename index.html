@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>株管理 ＆ 黄金ルールAI v23</title>
+    <title>株管理 ＆ 黄金ルールAI v24</title>
     <style>
         body { margin: 0; background-color: #0d1117; color: #e6edf3; font-family: -apple-system, sans-serif; height: 100dvh; overflow: hidden; }
         .page { display: none; flex-direction: column; height: 100dvh; width: 100%; position: absolute; top: 0; left: 0; }
@@ -93,6 +93,20 @@
         .csv-cancel { flex:1; padding:12px; background:#21262d; color:#c9d1d9; border:none; border-radius:8px; font-size:14px; cursor:pointer; }
         .csv-confirm { flex:2; padding:12px; background:#238636; color:white; border:none; border-radius:8px; font-weight:bold; font-size:14px; cursor:pointer; }
         .sel-all-btn { font-size:11px; color:#58a6ff; background:none; border:none; cursor:pointer; padding:0 0 10px 0; text-align:left; }
+
+        /* 手動追加モーダル */
+        #add-modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:1500; flex-direction:column; justify-content:flex-end; }
+        #add-modal.open { display:flex; }
+        .add-modal-inner { background:#161b22; border-radius:16px 16px 0 0; padding:24px 20px; display:flex; flex-direction:column; gap:14px; }
+        .add-modal-title { font-weight:bold; color:#58a6ff; font-size:15px; }
+        .add-input-wrap { position:relative; }
+        .add-input { width:100%; background:#0d1117; color:#e6edf3; border:1px solid #30363d; border-radius:8px; padding:12px 44px 12px 12px; font-size:16px; box-sizing:border-box; }
+        .add-input:focus { outline:none; border-color:#58a6ff; }
+        .add-lookup-btn { position:absolute; right:10px; top:50%; transform:translateY(-50%); background:#1f6feb; border:none; border-radius:6px; color:white; font-size:11px; padding:4px 8px; cursor:pointer; }
+        .add-name-preview { font-size:13px; min-height:20px; padding:4px 2px; }
+        .add-actions { display:flex; gap:10px; }
+        .add-cancel { flex:1; padding:12px; background:#21262d; color:#c9d1d9; border:none; border-radius:8px; font-size:14px; cursor:pointer; }
+        .add-confirm { flex:2; padding:12px; background:#238636; color:white; border:none; border-radius:8px; font-weight:bold; font-size:14px; cursor:pointer; }
     </style>
 </head>
 <body>
@@ -117,7 +131,45 @@
     </div>
 </div>
 
+<!-- 手動追加モーダル -->
+<div id="add-modal">
+    <div class="add-modal-inner">
+        <div class="add-modal-title">＋ 銘柄を追加</div>
+        <div>
+            <div style="font-size:11px; color:#8b949e; margin-bottom:6px;">銘柄コード（4桁）または銘柄名を入力</div>
+            <div class="add-input-wrap">
+                <input type="text" id="add-input" class="add-input" placeholder="例：7203 または トヨタ自動車" inputmode="text">
+                <button class="add-lookup-btn" onclick="lookupStockName()">🔍 検索</button>
+            </div>
+        </div>
+        <div class="add-name-preview" id="add-name-preview"></div>
+        <div class="add-actions">
+            <button class="add-cancel" onclick="closeAddModal()">キャンセル</button>
+            <button class="add-confirm" onclick="confirmManualAdd()">追加する ✓</button>
+        </div>
+    </div>
+</div>
+
 <!-- APIキー設定画面 -->
+<!-- 手動追加モーダル -->
+<div id="add-modal">
+    <div class="add-modal-inner">
+        <div class="add-modal-title">＋ 銘柄を追加</div>
+        <div>
+            <div style="font-size:11px; color:#8b949e; margin-bottom:6px;">銘柄コード（4桁）または銘柄名を入力</div>
+            <div class="add-input-wrap">
+                <input type="text" id="add-input" class="add-input" placeholder="例：7203 または トヨタ自動車" inputmode="text">
+                <button class="add-lookup-btn" onclick="lookupStockName()">🔍 検索</button>
+            </div>
+        </div>
+        <div class="add-name-preview" id="add-name-preview"></div>
+        <div class="add-actions">
+            <button class="add-cancel" onclick="closeAddModal()">キャンセル</button>
+            <button class="add-confirm" onclick="confirmManualAdd()">追加する ✓</button>
+        </div>
+    </div>
+</div>
+
 <div id="page-apikey" class="page">
     <div class="apikey-card">
         <div class="apikey-logo">🔑</div>
@@ -142,7 +194,7 @@
 
 <div id="page-list" class="page">
     <div class="header">
-        <div class="header-title">📈 黄金ルールAI v23</div>
+        <div class="header-title">📈 黄金ルールAI v24</div>
         <div style="display:flex; gap:6px; align-items:center;">
             <button class="key-btn" id="header-key-btn" onclick="showPage('page-apikey')">🔑 APIキー</button>
             <button style="background:none; border:1px solid #da3633; color:#f85149; padding:4px 8px; border-radius:4px; font-size:10px;" onclick="clearAllData()">初期化</button>
@@ -587,17 +639,98 @@
         else alert("変更はありませんでした。");
     }
 
-    // ===== 手動追加 =====
+    // ===== 手動追加モーダル =====
+    let addModalResolved = { name: '', code: '' };
+
     function manualAdd() {
-        const name = prompt("銘柄名を入力してください（例：ヤマハ発動機）");
-        if (!name) return;
-        const code = prompt("4桁のコードを入力してください（例：7272）");
-        if (!code || !/^\d{4}$/.test(code)) { alert("コードは4桁の数字で入力してください。"); return; }
-        // 現在表示中のタブに追加
-        const group = currentTab;
-        appData.stocks.push({ id: Date.now() + Math.random(), name, code, group });
-        save(); render();
+        addModalResolved = { name: '', code: '' };
+        const inp = document.getElementById('add-input');
+        inp.value = '';
+        document.getElementById('add-name-preview').innerHTML = '';
+        document.getElementById('add-modal').classList.add('open');
+        setTimeout(() => inp.focus(), 100);
     }
+
+    function closeAddModal() {
+        document.getElementById('add-modal').classList.remove('open');
+    }
+
+    async function lookupStockName() {
+        const val = document.getElementById('add-input').value.trim();
+        const preview = document.getElementById('add-name-preview');
+        if (!val) return;
+
+        const is4digit = /^\d{4}$/.test(val);
+
+        if (is4digit) {
+            // コード入力 → AIで銘柄名を検索
+            preview.innerHTML = '<span style="color:#8b949e;">⏳ 銘柄名を検索中...</span>';
+            try {
+                const prompt = `日本株コード ${val} の正式な銘柄名を1行だけ答えてください。銘柄名のみ、説明不要。`;
+                const resp = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + getApiKey(), {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                });
+                const d = await resp.json();
+                const name = d.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+                if (name) {
+                    addModalResolved = { name, code: val };
+                    preview.innerHTML = `<span style="color:#3fb950;">✅ ${name}</span>`;
+                } else {
+                    preview.innerHTML = '<span style="color:#f85149;">見つかりませんでした</span>';
+                }
+            } catch(e) {
+                preview.innerHTML = '<span style="color:#f85149;">検索エラー</span>';
+            }
+        } else {
+            // 銘柄名入力 → AIでコードを検索
+            preview.innerHTML = '<span style="color:#8b949e;">⏳ コードを検索中...</span>';
+            try {
+                const prompt = `日本株「${val}」の4桁の証券コードを数字4桁のみで答えてください。説明不要。`;
+                const resp = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + getApiKey(), {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                });
+                const d = await resp.json();
+                const raw = d.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+                const code = (raw.match(/\d{4}/) || [])[0] || '';
+                if (code) {
+                    addModalResolved = { name: val, code };
+                    preview.innerHTML = `<span style="color:#3fb950;">✅ コード: ${code}</span>`;
+                } else {
+                    preview.innerHTML = '<span style="color:#f85149;">コードが見つかりませんでした</span>';
+                }
+            } catch(e) {
+                preview.innerHTML = '<span style="color:#f85149;">検索エラー</span>';
+            }
+        }
+    }
+
+    function confirmManualAdd() {
+        const val = document.getElementById('add-input').value.trim();
+        let { name, code } = addModalResolved;
+
+        // 検索していない場合のフォールバック
+        if (!name && !code) {
+            if (/^\d{4}$/.test(val)) { code = val; name = `銘柄${val}`; }
+            else { name = val; }
+        }
+        if (!name) { alert('銘柄名またはコードを入力してください'); return; }
+        if (!code) { alert('🔍検索ボタンでコードを確認してから追加してください'); return; }
+        if (!/^\d{4}$/.test(code)) { alert('コードが4桁ではありません'); return; }
+        if (appData.stocks.some(s => s.code === code)) { alert('すでに登録済みの銘柄です'); return; }
+
+        appData.stocks.push({ id: Date.now() + Math.random(), name, code, group: currentTab });
+        save(); render();
+        closeAddModal();
+    }
+
+    // Enterキーで検索
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('add-input')?.addEventListener('keydown', e => {
+            if (e.key === 'Enter') lookupStockName();
+        });
+    });
 
     // ===== 描画 =====
     function fmtNum(v) {
