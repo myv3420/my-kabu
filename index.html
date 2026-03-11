@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>株管理 ＆ 黄金ルールAI v13</title>
+    <title>株管理 ＆ 黄金ルールAI v13.5</title>
     <style>
         body { margin: 0; background-color: #0d1117; color: #e6edf3; font-family: -apple-system, sans-serif; height: 100vh; overflow: hidden; }
         .page { display: none; flex-direction: column; height: 100vh; width: 100%; position: absolute; top: 0; left: 0; }
@@ -33,18 +33,18 @@
 </head>
 <body>
 
-<div id="loading"><div>AIが解析中...🔍✨</div><div style="font-size:12px; margin-top:10px;">少し時間がかかる場合があります</div></div>
+<div id="loading"><div id="loading-text">AIが解析中...🔍✨</div><div style="font-size:12px; margin-top:10px;">画像が多いと少し時間がかかります</div></div>
 
 <div id="page-list" class="page active">
     <div class="header">
-        <div class="header-title">📊 株管理 ＆ 黄金ルールAI v13</div>
+        <div class="header-title">📊 株管理 ＆ 黄金ルールAI v13.5</div>
         <button style="font-size:10px; background:#da3633; color:white; border:none; padding:6px 10px; border-radius:6px;" onclick="clearAllData()">リセット</button>
     </div>
     <div class="import-section">
-        <label class="ocr-label-btn">📸 スクショから銘柄を登録
-            <input type="file" id="ocr-input" accept="image/*" style="display:none;" onchange="importFromImage(this)">
+        <label class="ocr-label-btn">📸 スクショを複数選んで登録
+            <input type="file" id="ocr-input" accept="image/*" multiple style="display:none;" onchange="importFromImages(this)">
         </label>
-        <div style="font-size:10px; color:#8b949e; margin-top:8px;">※楽天証券の保有銘柄画面などを画像で選んでください</div>
+        <div style="font-size:10px; color:#8b949e; margin-top:8px;">※2枚以上の画像も同時に選択可能です</div>
     </div>
     <div id="stock-list-container" class="stock-list-container"></div>
 </div>
@@ -70,7 +70,7 @@
 
 <script>
     const API_KEY = 'AIzaSyBa2SEsc_y-ooTnXUwKjVORk8gvKOwtbsg';
-    const STORAGE_KEY = 'stock_app_v13_img_mode';
+    const STORAGE_KEY = 'stock_app_v13_5_multi';
     let appData = JSON.parse(localStorage.getItem(STORAGE_KEY)) || { stocks: [] };
     let currentStock = null;
     let selectedChatFile = null;
@@ -78,39 +78,47 @@
     function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(appData)); }
     function showPage(id) { document.querySelectorAll('.page').forEach(p => p.classList.remove('active')); document.getElementById(id).classList.add('active'); }
 
-    // --- 画像から銘柄を読み取る (OCR) ---
-    async function importFromImage(input) {
-        const file = input.files[0];
-        if (!file) return;
-        document.getElementById('loading').style.display = 'flex';
+    // --- 複数画像から銘柄を順次読み取る ---
+    async function importFromImages(input) {
+        const files = Array.from(input.files);
+        if (files.length === 0) return;
         
-        try {
-            const prompt = `この画像（楽天証券の資産画面など）から、保有している銘柄の名前と4桁の銘柄コードをすべて抽出してください。
-出力形式は必ず以下のJSON形式のみにしてください。余計な説明は不要です。
-{"results": [{"name": "銘柄名", "code": "4桁コード"}]}`;
+        const loading = document.getElementById('loading');
+        const loadingText = document.getElementById('loading-text');
+        loading.style.display = 'flex';
+        
+        let totalAdded = 0;
 
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: file.type, data: (await toBase64(file)).split(',')[1] } }] }] })
-            });
-            const data = await response.json();
-            const jsonText = data.candidates[0].content.parts[0].text.replace(/```json|```/g, '');
-            const parsed = JSON.parse(jsonText);
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            loadingText.innerText = `${files.length}枚中 ${i+1}枚目を解析中...🔍`;
             
-            parsed.results.forEach(s => {
-                if (!appData.stocks.some(existing => existing.code === s.code)) {
-                    appData.stocks.push({ id: Date.now() + Math.random(), name: s.name, code: s.code });
-                }
-            });
-            save(); render();
-            alert(`${parsed.results.length}件の銘柄を画像から登録しました！✨`);
-        } catch (e) {
-            alert("画像の解析に失敗しました。もう少しはっきりした画像で試してください。");
-        } finally {
-            document.getElementById('loading').style.display = 'none';
-            input.value = "";
+            try {
+                const prompt = `この画像から、保有している銘柄名と4桁コードを抽出してください。JSON形式のみで返してください。{"results": [{"name": "銘柄名", "code": "4桁"}]}`;
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: file.type, data: (await toBase64(file)).split(',')[1] } }] }] })
+                });
+                const data = await response.json();
+                const jsonText = data.candidates[0].content.parts[0].text.replace(/```json|```/g, '');
+                const parsed = JSON.parse(jsonText);
+                
+                parsed.results.forEach(s => {
+                    if (!appData.stocks.some(existing => existing.code === s.code)) {
+                        appData.stocks.push({ id: Date.now() + Math.random(), name: s.name, code: s.code });
+                        totalAdded++;
+                    }
+                });
+            } catch (e) {
+                console.error("解析エラー:", e);
+            }
         }
+
+        save(); render();
+        loading.style.display = 'none';
+        alert(`合計 ${totalAdded}件の新しい銘柄を登録しました！✨`);
+        input.value = "";
     }
 
     function render() {
@@ -124,14 +132,13 @@
                     <button class="action-btn" onclick="deleteStock(${s.id})">🗑 削除</button>
                 </div>
             </div>
-        `).join('') + (appData.stocks.length === 0 ? '<div style="padding:40px; text-align:center; color:#8b949e;">まだ銘柄がありません。<br>上のボタンからスクショを読み込んでね！📸</div>' : '');
+        `).join('') + (appData.stocks.length === 0 ? '<div style="padding:40px; text-align:center; color:#8b949e;">銘柄がありません。スクショを読み込んでね！📸</div>' : '');
     }
 
-    // --- チャット機能 ---
     function openConsult(name, code) {
         currentStock = { name, code };
         document.getElementById('chat-header-title').innerText = `${name} (${code})`;
-        document.getElementById('chat-messages').innerHTML = `<div class="ai-msg">「${name}」の分析準備OK！📊✨<br>チャート画像を送ってください。黄金ルールで分析します！</div>`;
+        document.getElementById('chat-messages').innerHTML = `<div class="ai-msg">「${name}」の分析準備OK！📊✨<br>チャート画像を送ってください。</div>`;
         showPage('page-chat');
     }
 
@@ -141,35 +148,28 @@
     }
 
     async function handleSend() {
-        if (!selectedChatFile) { alert("チャート画像を選んでください！📸"); return; }
+        if (!selectedChatFile) { alert("画像を選んでください！📸"); return; }
         const textInput = document.getElementById('user-text');
         const messages = document.getElementById('chat-messages');
         const loading = document.getElementById('loading');
 
         const userText = textInput.value || "このチャートを分析して！";
-        const userDiv = document.createElement('div');
-        userDiv.className = 'user-msg';
-        userDiv.textContent = userText;
-        const img = document.createElement('img');
-        img.className = 'preview-img';
-        img.src = URL.createObjectURL(selectedChatFile);
-        userDiv.appendChild(img);
-        messages.appendChild(userDiv);
+        const userDiv = document.createElement('div'); userDiv.className = 'user-msg'; userDiv.textContent = userText;
+        const img = document.createElement('img'); img.className = 'preview-img'; img.src = URL.createObjectURL(selectedChatFile);
+        userDiv.appendChild(img); messages.appendChild(userDiv);
         
         loading.style.display = 'flex';
         messages.scrollTop = messages.scrollHeight;
 
         try {
-            const prompt = `銘柄：${currentStock.name} (${currentStock.code}) に関する黄金ルール分析。画像からGMMA、ボリバン等を推測し回答せよ。`;
+            const prompt = `銘柄：${currentStock.name} (${currentStock.code}) に関する黄金ルール分析。`;
             const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: selectedChatFile.type, data: (await toBase64(selectedChatFile)).split(',')[1] } }] }] })
             });
             const data = await response.json();
-            const aiDiv = document.createElement('div');
-            aiDiv.className = 'ai-msg';
-            aiDiv.textContent = data.candidates[0].content.parts[0].text;
+            const aiDiv = document.createElement('div'); aiDiv.className = 'ai-msg'; aiDiv.textContent = data.candidates[0].content.parts[0].text;
             messages.appendChild(aiDiv);
         } catch (e) { alert("エラーが発生しました。"); }
         finally {
