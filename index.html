@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>株管理 ＆ 黄金ルールAI v21</title>
+    <title>株管理 ＆ 黄金ルールAI v23</title>
     <style>
         body { margin: 0; background-color: #0d1117; color: #e6edf3; font-family: -apple-system, sans-serif; height: 100dvh; overflow: hidden; }
         .page { display: none; flex-direction: column; height: 100dvh; width: 100%; position: absolute; top: 0; left: 0; }
@@ -20,7 +20,12 @@
         .btn-csv   { background: #1f6feb; color: white; }
         .btn-manual{ background: #21262d; color: #58a6ff; border: 1px solid #388bfd; font-size: 12px; padding: 9px 8px; }
         .btn-pbr   { background: #6e40c9; color: white; }
-        .btn-pbr   { background: #6e40c9; color: white; }
+
+        /* タブ */
+        .tab-bar { display: flex; background: #0d1117; border-bottom: 1px solid #30363d; flex-shrink: 0; }
+        .tab-btn { flex: 1; padding: 10px 4px; font-size: 13px; font-weight: bold; text-align: center; cursor: pointer; border: none; background: none; color: #8b949e; border-bottom: 2px solid transparent; }
+        .tab-btn.active { color: #58a6ff; border-bottom: 2px solid #58a6ff; }
+        .tab-count { font-size: 10px; background: #21262d; border-radius: 8px; padding: 1px 5px; margin-left: 4px; }
 
         /* CSV形式ヒント */
         .csv-hint { font-size: 10px; color: #8b949e; padding: 6px 10px; background: #0d1117; border-radius: 6px; border: 1px dashed #30363d; line-height: 1.6; }
@@ -137,7 +142,7 @@
 
 <div id="page-list" class="page">
     <div class="header">
-        <div class="header-title">📈 黄金ルールAI v21</div>
+        <div class="header-title">📈 黄金ルールAI v23</div>
         <div style="display:flex; gap:6px; align-items:center;">
             <button class="key-btn" id="header-key-btn" onclick="showPage('page-apikey')">🔑 APIキー</button>
             <button style="background:none; border:1px solid #da3633; color:#f85149; padding:4px 8px; border-radius:4px; font-size:10px;" onclick="clearAllData()">初期化</button>
@@ -145,35 +150,29 @@
     </div>
     <div class="import-section">
         <div class="import-row">
-            <!-- 画像OCR -->
             <label class="import-btn btn-image">
                 📸 スクショ読込
                 <input type="file" id="ocr-input" accept="image/*" multiple style="display:none;" onchange="importFromImages(this)">
             </label>
-            <!-- CSV -->
             <label class="import-btn btn-csv">
                 📄 CSV読込
                 <input type="file" id="csv-input" accept=".csv,text/csv" style="display:none;" onchange="importFromCSV(this)">
             </label>
-            <!-- 手動 -->
             <button class="import-btn btn-manual" onclick="manualAdd()">＋ 手動追加</button>
         </div>
         <label class="import-btn btn-pbr" style="font-size:12px; margin:0;">
             📊 PBR・PER・配当をスクショから更新
             <input type="file" id="pbr-input" accept="image/*" multiple style="display:none;" onchange="importPbrFromImages(this)">
         </label>
-        <div class="import-row">
-            <!-- PBR/PER/配当 スクショ読込 -->
-            <label class="import-btn btn-pbr" style="font-size:12px;">
-                📊 PBR・PER・配当をスクショから更新
-                <input type="file" id="pbr-input" accept="image/*" multiple style="display:none;" onchange="importPbrFromImages(this)">
-            </label>
-        </div>
         <div class="csv-hint">
             📄 <b>楽天証券「保有資産一覧CSV」に対応</b><br>
             保有数・取得単価・現在値・評価損益を自動取得<br>
             <span style="color:#58a6ff;">マイページ → 保有商品一覧 → CSV出力</span>
         </div>
+    </div>
+    <div class="tab-bar">
+        <button class="tab-btn active" id="tab-holding" onclick="switchTab('holding')">💹 保有中 <span class="tab-count" id="tab-count-holding">0</span></button>
+        <button class="tab-btn" id="tab-watch" onclick="switchTab('watch')">👀 ウォッチ中 <span class="tab-count" id="tab-count-watch">0</span></button>
     </div>
     <div class="stock-count" id="stock-count">登録銘柄：0件</div>
     <div id="stock-list-container" class="stock-list-container"></div>
@@ -206,6 +205,7 @@
     let currentStock = null;
     let selectedChatFile = null;
     let csvPendingRows = [];
+    let currentTab = 'holding'; // 'holding' | 'watch'
 
     function getApiKey() { return localStorage.getItem(APIKEY_STORAGE) || ''; }
     function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(appData)); }
@@ -566,7 +566,8 @@
                 name: row.name, code: row.code,
                 account: row.account, qty: row.qty, avgCost: row.avgCost,
                 price: row.price, dayChange: row.dayChange,
-                marketVal: row.marketVal, gainAmt: row.gainAmt, gainPct: row.gainPct
+                marketVal: row.marketVal, gainAmt: row.gainAmt, gainPct: row.gainPct,
+                group: row.qty ? 'holding' : (existing?.group || 'holding')
             };
             if (existing) {
                 // 既存銘柄は詳細データだけ更新
@@ -592,7 +593,9 @@
         if (!name) return;
         const code = prompt("4桁のコードを入力してください（例：7272）");
         if (!code || !/^\d{4}$/.test(code)) { alert("コードは4桁の数字で入力してください。"); return; }
-        appData.stocks.push({ id: Date.now() + Math.random(), name, code });
+        // 現在表示中のタブに追加
+        const group = currentTab;
+        appData.stocks.push({ id: Date.now() + Math.random(), name, code, group });
         save(); render();
     }
 
@@ -606,14 +609,36 @@
         const n = parseFloat(String(v).replace(/[+,]/g, ''));
         return isNaN(n) ? '' : n > 0 ? 'plus' : n < 0 ? 'minus' : '';
     }
+    function switchTab(tab) {
+        currentTab = tab;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById('tab-' + tab).classList.add('active');
+        render();
+    }
+
+    function moveGroup(id, group) {
+        const s = appData.stocks.find(s => String(s.id) === id);
+        if (s) { s.group = group; save(); render(); }
+    }
+
     function render() {
         const container = document.getElementById('stock-list-container');
-        document.getElementById('stock-count').textContent = `登録銘柄：${appData.stocks.length}件`;
-        if (appData.stocks.length === 0) {
-            container.innerHTML = '<div style="padding:50px; text-align:center; color:#8b949e; font-size:13px;">スクショ・CSVを読み込むか、<br>手動ボタンで銘柄を登録してください📸</div>';
+        // タブ件数を更新
+        const holdingCount = appData.stocks.filter(s => (s.group || 'holding') === 'holding').length;
+        const watchCount   = appData.stocks.filter(s => (s.group || 'holding') === 'watch').length;
+        document.getElementById('tab-count-holding').textContent = holdingCount;
+        document.getElementById('tab-count-watch').textContent   = watchCount;
+
+        const filtered = appData.stocks.filter(s => (s.group || 'holding') === currentTab);
+        document.getElementById('stock-count').textContent = `${currentTab === 'holding' ? '保有中' : 'ウォッチ中'}：${filtered.length}件`;
+        if (filtered.length === 0) {
+            const msg = currentTab === 'holding'
+                ? 'CSVを読み込むか手動追加で<br>保有銘柄を登録してください📊'
+                : '手動追加ボタンで<br>ウォッチ銘柄を追加してください👀';
+            container.innerHTML = `<div style="padding:50px; text-align:center; color:#8b949e; font-size:13px;">${msg}</div>`;
             return;
         }
-        container.innerHTML = appData.stocks.map(s => {
+        container.innerHTML = filtered.map(s => {
             const safeId = String(s.id);
             const hasDetail = s.qty !== undefined;
             // 評価損益の符号クラス
@@ -641,8 +666,11 @@
                         <div class="stock-name">${escHtml(s.name)}</div>
                         <div class="stock-code">${escHtml(s.code)}${s.dayChange ? `　前日比 <span class="${priceClass}">${s.dayChange}円</span>` : ''}</div>
                     </div>
-                    <div style="display:flex; gap:8px; flex-shrink:0; margin-left:10px;">
+                    <div style="display:flex; gap:6px; flex-shrink:0; margin-left:8px;">
                         <button class="action-btn" style="border-color:#58a6ff; color:#58a6ff;" data-id="${safeId}" onclick="openConsultById(this.dataset.id)">分析 📈</button>
+                        ${s.group === 'watch' || !s.group
+                            ? `<button class="action-btn" style="font-size:10px;" data-id="${safeId}" onclick="moveGroup(this.dataset.id,'holding')" title="保有中へ移動">💹</button>`
+                            : `<button class="action-btn" style="font-size:10px;" data-id="${safeId}" onclick="moveGroup(this.dataset.id,'watch')" title="ウォッチ中へ移動">👀</button>`}
                         <button class="action-btn" data-id="${safeId}" onclick="deleteStock(this.dataset.id)">🗑</button>
                     </div>
                 </div>
@@ -657,7 +685,9 @@
     }
 
     function openConsult(name, code) {
-        currentStock = { name, code };
+        // stockオブジェクト全体をcurrentStockに保持（保有データも含む）
+        const stockObj = appData.stocks.find(s => s.code === code);
+        currentStock = stockObj ? { ...stockObj } : { name, code };
         document.getElementById('chat-header-title').innerText = `${name} (${code})`;
         renderChatHistory(code);
         showPage('page-chat');
@@ -692,7 +722,19 @@
         messages.scrollTop = messages.scrollHeight;
 
         try {
-            const prompt = `あなたは「黄金ルール」の投資顧問です。銘柄：${currentStock.name} (${currentStock.code}) のチャート画像を分析してください。
+            // 保有データをプロンプトに組み込む
+            const s = currentStock;
+            const holdingInfo = s.qty ? `
+【保有情報】
+・保有数量：${s.qty}株
+・平均取得単価：${s.avgCost}円
+・現在値：${s.price}円
+・時価評価額：${s.marketVal}円
+・評価損益：${s.gainAmt}円（${s.gainPct}%）
+・PER：${s.per || '不明'}　PBR：${s.pbr || '不明'}　配当利回り：${s.div || '不明'}%` : '';
+
+            const prompt = `あなたは「黄金ルール」の投資顧問です。銘柄：${s.name} (${s.code}) のチャート画像を分析してください。
+${holdingInfo}
 
 以下の指標を読み取り、分かりやすく解説してください：
 - GMMA（短期・長期移動平均線群の状態）
@@ -703,6 +745,8 @@
 回答ルール：
 ・絵文字を適度に使って視覚的に分かりやすくすること（📈📉🔴🟢⚠️✅ など）
 ・「今買いか？待ちか？」を明確にズバッと述べること
+・保有情報がある場合は「含み益/損の状況」「今売るべきか継続保有か」も具体的に言及すること
+・PER・PBRがある場合は割高・割安の判断も加えること
 ・専門用語は噛み砕いて説明すること
 ・箇条書きや見出しを使って読みやすく整理すること`;
             const base64 = await toBase64(selectedChatFile);
