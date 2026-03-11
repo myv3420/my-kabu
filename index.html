@@ -3,154 +3,194 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>黄金ルール分析 - 記憶版</title>
+    <title>黄金ルール分析 Pro Max</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
     <style>
-        body { margin: 0; background-color: #0d1117; color: #e6edf3; font-family: -apple-system, sans-serif; display: flex; flex-direction: column; height: 100vh; }
-        .header { padding: 10px; background: #161b22; border-bottom: 1px solid #30363d; font-weight: bold; text-align: center; color: #58a6ff; display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; }
-        
-        .tab-bar { display: flex; background: #161b22; border-bottom: 2px solid #30363d; }
-        .tab { flex: 1; padding: 12px; text-align: center; font-size: 13px; cursor: pointer; color: #8b949e; border-bottom: 3px solid transparent; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .tab.active { color: #58a6ff; border-bottom: 3px solid #2962ff; background: rgba(88, 166, 255, 0.1); font-weight: bold; }
+        body { margin: 0; background-color: #0d1117; color: #e6edf3; font-family: -apple-system, sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        .header { padding: 12px 15px; background: #161b22; border-bottom: 1px solid #30363d; display: flex; justify-content: space-between; align-items: center; }
+        .header-title { font-weight: bold; color: #58a6ff; font-size: 15px; }
 
-        .chat-container { flex: 1; overflow-y: auto; padding: 15px; display: none; flex-direction: column; gap: 15px; scroll-behavior: smooth; }
-        .chat-container.active { display: flex; }
-        
-        .ai-msg { background: #21262d; padding: 16px; border-radius: 20px 20px 20px 5px; border-left: 5px solid #2962ff; align-self: flex-start; max-width: 90%; white-space: pre-wrap; line-height: 1.7; font-size: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
-        .user-msg { background: #238636; color: white; padding: 12px 18px; border-radius: 20px 20px 5px 20px; align-self: flex-end; max-width: 85%; font-size: 14px; font-weight: bold; }
-        .preview-img { max-width: 100%; border-radius: 12px; margin-top: 10px; border: 2px solid #30363d; }
+        /* CSV読込エリアを最優先で改善 */
+        .import-section { padding: 20px 15px; background: #1c2128; border-bottom: 2px solid #30363d; text-align: center; }
+        .csv-label-btn { display: block; width: 100%; padding: 15px; background: #238636; color: white; border-radius: 12px; font-weight: bold; font-size: 15px; cursor: pointer; border: 2px solid #2ea043; }
+        /* input本体は隠すが、OSのファイル選択を阻害しないようにする */
+        #csv-file-input { display: none; }
 
-        .controls { padding: 10px; background: #161b22; border-top: 1px solid #30363d; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
-        .btn-clear { font-size: 11px; background: #da3633; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; }
-        textarea { width: 100%; background: #0d1117; border: 1.5px solid #30363d; color: white; padding: 12px; border-radius: 15px; resize: none; font-size: 16px; outline: none; box-sizing: border-box; }
-        .action-btns { display: flex; gap: 10px; margin-top: 10px; }
-        .btn { flex: 1; padding: 14px; border-radius: 12px; border: none; font-weight: bold; font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
-        .btn-upload { background: #30363d; color: #e6edf3; }
-        .btn-send { background: #2962ff; color: white; }
-        #loading { display: none; text-align: center; font-size: 14px; color: #58a6ff; margin-bottom: 8px; font-weight: bold; }
+        .group-bar { display: flex; background: #161b22; border-bottom: 1px solid #30363d; overflow-x: auto; }
+        .group-tab { padding: 12px 18px; font-size: 13px; color: #8b949e; white-space: nowrap; border-bottom: 3px solid transparent; }
+        .group-tab.active { color: #58a6ff; border-bottom: 3px solid #2962ff; background: rgba(88, 166, 255, 0.1); font-weight: bold; }
+
+        .stock-list-container { flex: 1; overflow-y: auto; }
+        .stock-item { padding: 15px; border-bottom: 1px solid #21262d; }
+        .stock-main { display: flex; justify-content: space-between; align-items: center; }
+        .price { font-size: 18px; font-weight: bold; }
+        .yield-badge { font-size: 10px; background: #238636; color: white; padding: 2px 6px; border-radius: 4px; margin-left: 5px; }
+
+        .item-controls { display: flex; gap: 10px; margin-top: 8px; }
+        .mini-btn { font-size: 11px; padding: 8px 14px; border-radius: 6px; border: 1px solid #30363d; background: #161b22; color: #8b949e; }
+
+        #move-menu { position: fixed; bottom: -100%; left: 0; width: 100%; background: #161b22; transition: 0.3s; z-index: 200; padding: 20px; border-radius: 20px 20px 0 0; box-sizing: border-box; }
+        #move-menu.active { bottom: 0; }
+        .menu-btn { display: block; width: 100%; padding: 15px; margin-bottom: 10px; background: #21262d; color: white; border: 1px solid #30363d; border-radius: 12px; text-align: center; }
+        .overlay-bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: none; z-index: 199; }
+        
+        #status-msg { font-size: 12px; color: #8b949e; margin-top: 8px; display: block; }
     </style>
 </head>
 <body>
 
     <div class="header">
-        <span>📈 AI株分析</span>
-        <button class="btn-clear" onclick="clearAllData()">全消去</button>
+        <div class="header-title">📊 株管理アプリ Pro</div>
+        <button style="font-size:11px; background:#30363d; color:white; border:none; padding:8px 12px; border-radius:6px;" onclick="updateAllPrices()">株価更新 ↻</button>
     </div>
 
-    <div class="tab-bar">
-        <div id="tab-A" class="tab active" onclick="switchTab('A')" ondblclick="renameTab('A')">銘柄A</div>
-        <div id="tab-B" class="tab" onclick="switchTab('B')" ondblclick="renameTab('B')">銘柄B</div>
-        <div id="tab-C" class="tab" onclick="switchTab('C')" ondblclick="renameTab('C')">銘柄C</div>
+    <div class="import-section">
+        <label for="csv-file-input" class="csv-label-btn">
+            📁 楽天CSVを選択する
+        </label>
+        <input type="file" id="csv-file-input" accept=".csv" onchange="importCSV(this)">
+        <span id="status-msg">タップでダウンロードフォルダ等が開きます</span>
     </div>
 
-    <div id="chat-A" class="chat-container active"></div>
-    <div id="chat-B" class="chat-container"></div>
-    <div id="chat-C" class="chat-container"></div>
+    <div class="group-bar" id="group-bar"></div>
+    <div class="stock-list-container" id="stock-list-container"></div>
 
-    <div id="loading">分析中...🔍✨</div>
-
-    <div class="controls">
-        <textarea id="user-text" rows="2" placeholder="分析のポイントを入力"></textarea>
-        <div class="action-btns">
-            <label class="btn btn-upload">
-                📸 画像
-                <input type="file" id="image-input" accept="image/*" style="display:none;">
-            </label>
-            <button class="btn btn-send" onclick="handleSend()">送信</button>
-        </div>
+    <div class="overlay-bg" id="overlay-bg" onclick="closeMoveMenu()"></div>
+    <div id="move-menu">
+        <div style="color:#8b949e; text-align:center; margin-bottom:15px;">移動先を選択</div>
+        <div id="menu-options"></div>
+        <button class="menu-btn" style="background:#30363d;" onclick="closeMoveMenu()">キャンセル</button>
     </div>
 
     <script>
-        const API_KEY = 'AIzaSyBa2SEsc_y-ooTnXUwKjVORk8gvKOwtbsg';
-        let currentTab = 'A';
-        let selectedFile = null;
-
-        // 初期化：保存されたデータを読み込む
-        window.onload = () => {
-            ['A', 'B', 'C'].forEach(id => {
-                const savedChat = localStorage.getItem(`chatData-${id}`);
-                if (savedChat) document.getElementById(`chat-${id}`).innerHTML = savedChat;
-                
-                const savedName = localStorage.getItem(`tabName-${id}`);
-                if (savedName) document.getElementById(`tab-${id}`).innerText = savedName;
-            });
-            if (!document.getElementById('chat-A').innerHTML) {
-                document.getElementById('chat-A').innerHTML = '<div class="ai-msg">画像を分析してここに記録を残せます📈</div>';
-            }
+        const STORAGE_KEY = 'stock-app-v11-3-final';
+        
+        let appData = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {
+            groups: [
+                { id: 999, name: '持ち株', stocks: [] },
+                { id: 1, name: '高配当株', stocks: [] }, 
+                { id: 2, name: '監視銘柄', stocks: [] }
+            ],
+            activeGroupId: 999
         };
+        let pendingMoveStock = null;
 
-        function switchTab(id) {
-            currentTab = id;
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.chat-container').forEach(c => c.classList.remove('active'));
-            document.getElementById(`tab-${id}`).classList.add('active');
-            document.getElementById(`chat-${id}`).classList.add('active');
+        function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(appData)); }
+
+        // CSV読み込み処理
+        function importCSV(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const text = e.target.result;
+                    const lines = text.split('\n');
+                    let targetG = appData.groups.find(x => x.id === 999);
+                    
+                    let count = 0;
+                    lines.forEach(line => {
+                        const c = line.split(',').map(v => v.replace(/"/g, '').trim());
+                        const code = c[0], name = c[1], yieldVal = c[12]; 
+                        if (/^\d{4}$/.test(code) && !targetG.stocks.some(s => s.code === code)) {
+                            targetG.stocks.push({ id: Date.now() + count, name, code, yield: yieldVal || "0", lastPrice: null });
+                            count++;
+                        }
+                    });
+                    alert(`${count}件を取り込みました！`);
+                    appData.activeGroupId = 999;
+                    save(); render();
+                } catch (err) {
+                    alert("読み込みエラーが発生しました");
+                }
+                input.value = ""; // 連続選択できるようにリセット
+            };
+            reader.readAsText(file, 'Shift-JIS');
         }
 
-        function renameTab(id) {
-            const newName = prompt("銘柄名を入力してください", document.getElementById(`tab-${id}`).innerText);
-            if (newName) {
-                document.getElementById(`tab-${id}`).innerText = newName;
-                localStorage.setItem(`tabName-${id}`, newName);
+        async function updateAllPrices() {
+            const g = appData.groups.find(x => x.id === appData.activeGroupId);
+            if (!g || g.stocks.length === 0) return;
+            document.getElementById('status-msg').innerText = "取得中...";
+            for (let s of g.stocks) {
+                try {
+                    const res = await fetch(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${s.code}.T`);
+                    const data = await res.json();
+                    const q = data.quoteResponse.result[0];
+                    s.lastPrice = {
+                        price: q.regularMarketPrice.toLocaleString(),
+                        change: (q.regularMarketChange > 0 ? "+" : "") + q.regularMarketChange.toFixed(1)
+                    };
+                } catch (e) { }
             }
+            document.getElementById('status-msg').innerText = "更新完了";
+            save(); render();
         }
 
-        async function handleSend() {
-            const textInput = document.getElementById('user-text');
-            const messages = document.getElementById(`chat-${currentTab}`);
-            if (!selectedFile) return alert("画像を選んでください📸");
+        function render() {
+            const bar = document.getElementById('group-bar');
+            bar.innerHTML = appData.groups.map(g => `
+                <div class="group-tab ${g.id === appData.activeGroupId ? 'active' : ''}" onclick="switchGroup(${g.id})">${g.name}</div>
+            `).join('') + `<div style="padding:12px; color:#238636;" onclick="addGroup()">＋</div>`;
 
-            const userDiv = document.createElement('div');
-            userDiv.className = 'user-msg';
-            userDiv.textContent = textInput.value || "分析して！";
-            const img = document.createElement('img');
-            img.className = 'preview-img';
-            img.src = URL.createObjectURL(selectedFile);
-            userDiv.appendChild(img);
-            messages.appendChild(userDiv);
-            
-            document.getElementById('loading').style.display = 'block';
-            messages.scrollTop = messages.scrollHeight;
-
-            try {
-                const prompt = `投資初心者向けに、挨拶抜きで分析してください。黄金ルール（GMMA、先行MA、RSI MA、ボリバン、抵抗線、価格帯別出来高）を脳内合成して解説し、損切り・利確価格を出して。`;
-                const base64 = (await toBase64(selectedFile)).split(',')[1];
-                
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: selectedFile.type, data: base64 } }] }] })
-                });
-
-                const data = await response.json();
-                const aiDiv = document.createElement('div');
-                aiDiv.className = 'ai-msg';
-                aiDiv.textContent = data.candidates[0].content.parts[0].text;
-                messages.appendChild(aiDiv);
-                
-                // データを保存！
-                localStorage.setItem(`chatData-${currentTab}`, messages.innerHTML);
-
-            } catch (e) { alert("エラーが発生しました💦"); }
-            finally {
-                document.getElementById('loading').style.display = 'none';
-                selectedFile = null;
-                textInput.value = "";
-                messages.scrollTop = messages.scrollHeight;
-            }
+            const container = document.getElementById('stock-list-container');
+            const g = appData.groups.find(x => x.id === appData.activeGroupId);
+            container.innerHTML = g.stocks.map((s) => `
+                <div class="stock-item">
+                    <div class="stock-main">
+                        <div>
+                            <div class="stock-name" onclick="renameStock(${g.id}, ${s.id})">${s.name}${s.yield !== "0" ? `<span class="yield-badge">${s.yield}%</span>` : ''}</div>
+                            <div style="font-size:12px; color:#8b949e;">${s.code}</div>
+                        </div>
+                        <div style="text-align:right">
+                            <div class="price">${s.lastPrice ? s.lastPrice.price : '---'}</div>
+                            <div style="font-size:11px; color:${s.lastPrice?.change.includes('+') ? '#3fb950' : '#f85149'}">${s.lastPrice ? s.lastPrice.change : ''}</div>
+                        </div>
+                    </div>
+                    <div class="item-controls">
+                        <span class="mini-btn" onclick="openMoveMenu(${g.id}, ${s.id})" style="color:#d29922; border-color:#d29922;">振り分け</span>
+                        <span class="mini-btn" onclick="deleteStock(${g.id}, ${s.id})">削除</span>
+                    </div>
+                </div>
+            `).join('') + `<div style="padding:40px; text-align:center; color:#58a6ff;" onclick="addManual(${g.id})">＋ 手動追加</div>`;
         }
 
-        function clearAllData() {
-            if (confirm("全ての記録を消去しますか？")) {
-                localStorage.clear();
-                location.reload();
-            }
+        function openMoveMenu(gId, sId) {
+            pendingMoveStock = { gId, sId };
+            const opts = document.getElementById('menu-options');
+            opts.innerHTML = appData.groups.filter(g => g.id !== gId).map(g => `
+                <div class="menu-btn" onclick="executeMove(${g.id})">${g.name} へ移動</div>
+            `).join('');
+            document.getElementById('overlay-bg').style.display = 'block';
+            document.getElementById('move-menu').classList.add('active');
         }
 
-        const toBase64 = f => new Promise((r, j) => {
-            const rd = new FileReader(); rd.readAsDataURL(f);
-            rd.onload = () => r(rd.result); rd.onerror = e => j(e);
-        });
-        document.getElementById('image-input').addEventListener('change', (e) => selectedFile = e.target.files[0]);
+        function closeMoveMenu() {
+            document.getElementById('overlay-bg').style.display = 'none';
+            document.getElementById('move-menu').classList.remove('active');
+        }
+
+        function executeMove(targetId) {
+            const { gId, sId } = pendingMoveStock;
+            const fromG = appData.groups.find(x => x.id === gId);
+            const toG = appData.groups.find(x => x.id === targetId);
+            const idx = fromG.stocks.findIndex(x => x.id === sId);
+            toG.stocks.push(fromG.stocks.splice(idx, 1)[0]);
+            save(); render(); closeMoveMenu();
+        }
+
+        function switchGroup(id) { appData.activeGroupId = id; render(); }
+        function addGroup() { const n = prompt("新しいタブ名"); if (n) { appData.groups.push({ id: Date.now(), name: n, stocks: [] }); save(); render(); } }
+        function deleteStock(gId, sId) { if (confirm("削除しますか？")) { const g = appData.groups.find(x => x.id === gId); g.stocks = g.stocks.filter(s => s.id !== sId); save(); render(); } }
+        function renameStock(gId, sId) { 
+            const s = appData.groups.find(g => g.id === gId).stocks.find(x => x.id === sId);
+            const n = prompt("名前を変更", s.name);
+            if (n) { s.name = n; save(); render(); }
+        }
+        function addManual(gId) { const c = prompt("4桁コード"); if (c) { appData.groups.find(x => x.id === gId).stocks.push({ id: Date.now(), name: "手動追加", code: c, yield: "0", lastPrice: null }); save(); render(); updateAllPrices(); } }
+
+        render();
     </script>
 </body>
 </html>
