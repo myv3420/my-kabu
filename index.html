@@ -209,15 +209,19 @@
             const rows = text.split(/\r?\n/).filter(r => r.trim() !== '');
             csvPendingRows = [];
 
+            // ===== 楽天証券・SBI・iSPEED等 各種CSVフォーマット対応 =====
+            // 口座区分など「銘柄名でない列」を除外するキーワード
+            const NOT_NAME_PATTERN = /^(NISA|特定|一般|成長投資枠|つみたて枠|課税|非課税|口座|国内株式|外国株式|投資信託|株式|ETF|REIT|ファンド|-)$/;
+
             // ヘッダー行を解析して列インデックスを特定
             let codeColIdx = -1, nameColIdx = -1;
-            const firstRow = rows[0] ? rows[0].split(/[,\t]/).map(c => c.trim().replace(/^["']|["']$/g, '')) : [];
-            firstRow.forEach((h, i) => {
-                if (/コード|code|銘柄コード|ticker/i.test(h)) codeColIdx = i;
-                if (/銘柄名|name|銘柄$|会社名/i.test(h)) nameColIdx = i;
+            const firstRowCols = rows[0] ? rows[0].split(/[,\t]/).map(c => c.trim().replace(/^["']|["']$/g, '')) : [];
+            firstRowCols.forEach((h, i) => {
+                if (/^(銘柄コード|コード|証券コード|ticker|code)$/i.test(h)) codeColIdx = i;
+                if (/^(銘柄名|銘柄|name|会社名|銘柄・ファンド名)$/i.test(h)) nameColIdx = i;
             });
-
-            const startIdx = (codeColIdx >= 0 || nameColIdx >= 0) ? 1 : 0; // ヘッダーがあれば1行目をスキップ
+            const hasHeader = codeColIdx >= 0 || nameColIdx >= 0;
+            const startIdx = hasHeader ? 1 : 0;
 
             rows.forEach((row, idx) => {
                 if (idx < startIdx) return;
@@ -226,33 +230,36 @@
 
                 let name = '', code = '';
 
-                if (codeColIdx >= 0 && nameColIdx >= 0) {
-                    // ヘッダーで列が特定できた場合
+                if (hasHeader && codeColIdx >= 0 && nameColIdx >= 0) {
+                    // ヘッダーで両列が特定できた場合
                     code = cols[codeColIdx] || '';
                     name = cols[nameColIdx] || '';
+                } else if (hasHeader && codeColIdx >= 0) {
+                    // コード列のみ特定できた場合：4桁コード以外のNOT_NAME除外候補から名前を探す
+                    code = cols[codeColIdx] || '';
+                    const candidates = cols.filter((c, i) => i !== codeColIdx && c.length >= 2 && !/^\d+([.,]\d+)?$/.test(c) && !NOT_NAME_PATTERN.test(c));
+                    name = candidates[0] || '';
                 } else {
-                    // ヘッダーなし：全列から4桁数字を探す
+                    // ヘッダーなし or 未検出：全列から4桁コードを探す
                     let foundCodeIdx = -1;
                     cols.forEach((c, i) => { if (/^\d{4}$/.test(c)) foundCodeIdx = i; });
                     if (foundCodeIdx < 0) return;
                     code = cols[foundCodeIdx];
-                    // コード列以外で最も長い文字列を銘柄名とする
-                    const candidates = cols.filter((c, i) => i !== foundCodeIdx && c.length > 0 && !/^\d+$/.test(c));
-                    name = candidates.sort((a, b) => b.length - a.length)[0] || '';
+                    // NOT_NAMEパターン・数値を除いた候補から銘柄名を選ぶ
+                    const candidates = cols.filter((c, i) => i !== foundCodeIdx && c.length >= 2 && !/^\d+([.,]\d+)?%?$/.test(c) && !NOT_NAME_PATTERN.test(c));
+                    name = candidates[0] || '';
                 }
 
-                // ヘッダー文字列が混入した場合スキップ
-                if (/コード|code|銘柄|symbol/i.test(name) && /コード|code|銘柄|symbol/i.test(code)) return;
+                // ヘッダー行の混入スキップ
+                if (/^(銘柄コード|コード|code)$/i.test(code)) return;
                 if (!/^\d{4}$/.test(code)) return;
 
-                // 銘柄名が空・汎用的すぎる場合はコードを仮名として使用
-                const genericNames = ['国内株式', '株式', '日本株', '-', '―', ''];
-                if (!name || genericNames.includes(name)) {
-                    name = `銘柄${code}`; // 後でAIで補完
-                }
+                // 銘柄名が空 or 除外対象なら、AIで後から補完
+                const needsLookup = !name || NOT_NAME_PATTERN.test(name);
+                if (needsLookup) name = `銘柄${code}`;
 
                 const isDup = appData.stocks.some(s => s.code === code);
-                csvPendingRows.push({ name, code, isDup, needsNameLookup: genericNames.includes(name) || name === `銘柄${code}` });
+                csvPendingRows.push({ name, code, isDup, needsNameLookup: needsLookup });
             });
 
             if (csvPendingRows.length === 0) {
