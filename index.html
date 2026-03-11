@@ -20,33 +20,34 @@
         .stock-list-container { flex: 1; overflow-y: auto; padding-bottom: 80px; }
         .stock-item { padding: 15px; border-bottom: 1px solid #21262d; }
         .stock-main { display: flex; justify-content: space-between; align-items: center; }
-        .stock-name { font-weight: bold; font-size: 14px; }
+        .stock-name { font-weight: bold; font-size: 15px; color: #58a6ff; text-decoration: underline; cursor: pointer; }
         .price { font-size: 18px; font-weight: bold; }
-        .yield-badge { font-size: 10px; background: #238636; color: white; padding: 2px 6px; border-radius: 4px; margin-left: 5px; }
+        .yield-badge { font-size: 10px; background: #238636; color: white; padding: 2px 6px; border-radius: 4px; margin-left: 5px; text-decoration: none; display: inline-block; }
 
         .item-controls { display: flex; gap: 10px; margin-top: 10px; }
         .mini-btn { font-size: 11px; padding: 7px 12px; border-radius: 6px; border: 1px solid #30363d; background: #161b22; color: #c9d1d9; }
         
         #move-menu { position: fixed; bottom: -100%; left: 0; width: 100%; background: #161b22; transition: 0.3s; z-index: 200; padding: 20px; border-radius: 20px 20px 0 0; box-sizing: border-box; border-top: 1px solid #30363d; }
         #move-menu.active { bottom: 0; }
-        .menu-btn { display: block; width: 100%; padding: 15px; margin-bottom: 10px; background: #21262d; color: white; border: 1px solid #30363d; border-radius: 12px; text-align: center; }
+        .menu-btn { display: block; width: 100%; padding: 15px; margin-bottom: 10px; background: #21262d; color: white; border: 1px solid #30363d; border-radius: 12px; text-align: center; box-sizing: border-box; }
         .overlay-bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: none; z-index: 199; }
+        
+        /* コピー通知 */
+        #copy-toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #238636; color: white; padding: 10px 20px; border-radius: 20px; font-size: 12px; z-index: 1000; display: none; }
     </style>
 </head>
 <body>
 
+    <div id="copy-toast">相談文をコピーしました！Geminiに貼り付けてね</div>
+
     <div class="header">
-        <div class="header-title">📊 株管理アプリ Pro</div>
-        <div>
-            <button style="font-size:10px; background:#da3633; color:white; border:none; padding:6px 10px; border-radius:6px; margin-right:5px;" onclick="clearAllData()">初期化</button>
-            <button style="font-size:10px; background:#30363d; color:white; border:none; padding:6px 10px; border-radius:6px;" onclick="updateAllPrices()">株価更新 ↻</button>
-        </div>
+        <div class="header-title">📊 株管理アプリ Pro v11.7</div>
+        <button style="font-size:10px; background:#da3633; color:white; border:none; padding:6px 10px; border-radius:6px;" onclick="clearAllData()">リセット</button>
     </div>
 
     <div class="import-section">
         <label for="csv-file-input" class="csv-label-btn">📁 楽天証券のCSVを選択</label>
         <input type="file" id="csv-file-input" accept=".csv" onchange="importCSV(this)">
-        <div id="status-msg" style="font-size:11px; color:#8b949e; margin-top:8px;">※文字化けした場合は「初期化」後に再試行</div>
     </div>
 
     <div class="group-bar" id="group-bar"></div>
@@ -59,68 +60,45 @@
     </div>
 
     <script>
-        const STORAGE_KEY = 'stock_app_v11_5';
+        const STORAGE_KEY = 'stock_app_v11_7';
         let appData = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {
             groups: [{ id: 999, name: '持ち株', stocks: [] }, { id: 1, name: '高配当株', stocks: [] }, { id: 2, name: '監視銘柄', stocks: [] }],
             activeGroupId: 999
         };
-        let pendingMoveStock = null;
 
         function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(appData)); }
 
-        // 【最強版】文字化け回避CSV読み込み
+        // 銘柄名をタップした時の相談アクション
+        function askGemini(name, code) {
+            const text = `銘柄「${name} (${code})」について相談です。現在の株価推移や配当の安定性、今後の見通しについて分析してください。`;
+            navigator.clipboard.writeText(text).then(() => {
+                const toast = document.getElementById('copy-toast');
+                toast.style.display = 'block';
+                setTimeout(() => { toast.style.display = 'none'; }, 2500);
+            });
+        }
+
         function importCSV(input) {
             const file = input.files[0];
             if (!file) return;
-
             const reader = new FileReader();
             reader.onload = function(e) {
-                try {
-                    // Blobを使ってShift-JISとして確実に解釈させる
-                    const blob = new Blob([e.target.result]);
-                    const fr = new FileReader();
-                    fr.onload = function(ev) {
-                        const text = ev.target.result;
-                        const lines = text.split(/\r\n|\n/);
-                        let targetG = appData.groups.find(x => x.id === 999);
-                        let count = 0;
-
-                        lines.forEach(line => {
-                            const c = line.split(',').map(v => v.replace(/"/g, '').trim());
-                            if (/^\d{4}$/.test(c[0]) && !targetG.stocks.some(s => s.code === c[0])) {
-                                targetG.stocks.push({ id: Date.now() + count, name: c[1], code: c[0], yield: c[12] || "0", lastPrice: null });
-                                count++;
-                            }
-                        });
-                        alert(`${count}件取り込みました！`);
-                        save(); render();
-                    };
-                    fr.readAsText(blob, 'Shift-JIS');
-                } catch (err) { alert("エラーが発生しました"); }
-                input.value = "";
+                const decoder = new TextDecoder('shift-jis');
+                const text = decoder.decode(new Uint8Array(e.target.result));
+                const lines = text.split(/\r\n|\n/);
+                let targetG = appData.groups.find(x => x.id === 999);
+                let count = 0;
+                lines.forEach(line => {
+                    const c = line.split(',').map(v => v.replace(/"/g, '').trim());
+                    if (/^\d{4}$/.test(c[0]) && !targetG.stocks.some(s => s.code === c[0])) {
+                        targetG.stocks.push({ id: Date.now() + count, name: c[1], code: c[0], yield: c[12] || "0", lastPrice: null });
+                        count++;
+                    }
+                });
+                alert(`${count}件取り込みました！`);
+                save(); render();
             };
             reader.readAsArrayBuffer(file);
-        }
-
-        async function updateAllPrices() {
-            const g = appData.groups.find(x => x.id === appData.activeGroupId);
-            if (!g || g.stocks.length === 0) return;
-            for (let s of g.stocks) {
-                try {
-                    const res = await fetch(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${s.code}.T`);
-                    const data = await res.json();
-                    const q = data.quoteResponse.result[0];
-                    s.lastPrice = { price: q.regularMarketPrice.toLocaleString(), change: (q.regularMarketChange > 0 ? "+" : "") + q.regularMarketChange.toFixed(1) };
-                } catch (e) {}
-            }
-            save(); render();
-        }
-
-        function clearAllData() {
-            if (confirm("全てのデータを消去して初期化しますか？（文字化けが直らない時に試してください）")) {
-                localStorage.removeItem(STORAGE_KEY);
-                location.reload();
-            }
         }
 
         function render() {
@@ -131,17 +109,16 @@
             container.innerHTML = g.stocks.map((s) => `
                 <div class="stock-item">
                     <div class="stock-main">
-                        <div>
-                            <div class="stock-name" onclick="renameStock(${g.id}, ${s.id})">${s.name}${s.yield !== "0" ? `<span class="yield-badge">${s.yield}%</span>` : ''}</div>
-                            <div style="font-size:12px; color:#8b949e;">${s.code}</div>
+                        <div onclick="askGemini('${s.name}', '${s.code}')">
+                            <div class="stock-name">${s.name}${s.yield !== "0" ? `<span class="yield-badge">${s.yield}%</span>` : ''}</div>
+                            <div style="font-size:12px; color:#8b949e;">${s.code} (タップで相談文コピー)</div>
                         </div>
                         <div style="text-align:right">
                             <div class="price">${s.lastPrice ? s.lastPrice.price : '---'}</div>
-                            <div style="font-size:11px; color:${s.lastPrice?.change.includes('+') ? '#3fb950' : '#f85149'}">${s.lastPrice ? s.lastPrice.change : ''}</div>
                         </div>
                     </div>
                     <div class="item-controls">
-                        <span class="mini-btn" onclick="openMoveMenu(${g.id}, ${s.id})" style="color:#d29922; border-color:#d29922;">振り分け</span>
+                        <span class="mini-btn" onclick="openMoveMenu(${g.id}, ${s.id})" style="color:#d29922; border-color:#d29922;">タブ移動</span>
                         <span class="mini-btn" onclick="deleteStock(${g.id}, ${s.id})">削除</span>
                     </div>
                 </div>
@@ -149,10 +126,11 @@
         }
 
         function switchGroup(id) { appData.activeGroupId = id; render(); }
-        function addGroup() { const n = prompt("タブ名"); if (n) { appData.groups.push({ id: Date.now(), name: n, stocks: [] }); save(); render(); } }
+        function clearAllData() { if (confirm("リセットしますか？")) { localStorage.removeItem(STORAGE_KEY); location.reload(); } }
         function deleteStock(gId, sId) { if (confirm("削除しますか？")) { const g = appData.groups.find(x => x.id === gId); g.stocks = g.stocks.filter(s => s.id !== sId); save(); render(); } }
-        function renameStock(gId, sId) { const s = appData.groups.find(g => g.id === gId).stocks.find(x => x.id === sId); const n = prompt("名前変更", s.name); if (n) { s.name = n; save(); render(); } }
-        function addManual(gId) { const c = prompt("4桁コード"); if (c) { appData.groups.find(x => x.id === gId).stocks.push({ id: Date.now(), name: "新規銘柄", code: c, yield: "0", lastPrice: null }); save(); render(); updateAllPrices(); } }
+        function addManual(gId) { const c = prompt("4桁コード"); if (c) { appData.groups.find(x => x.id === gId).stocks.push({ id: Date.now(), name: "新規銘柄", code: c, yield: "0", lastPrice: null }); save(); render(); } }
+        
+        let pendingMoveStock = null;
         function openMoveMenu(gId, sId) {
             pendingMoveStock = { gId, sId };
             const opts = document.getElementById('menu-options');
@@ -169,6 +147,7 @@
             toG.stocks.push(fromG.stocks.splice(idx, 1)[0]);
             save(); render(); closeMoveMenu();
         }
+
         render();
     </script>
 </body>
