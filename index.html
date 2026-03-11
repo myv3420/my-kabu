@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>株管理 ＆ 黄金ルールAI v13.6</title>
+    <title>株管理 ＆ 黄金ルールAI v13.7</title>
     <style>
         body { margin: 0; background-color: #0d1117; color: #e6edf3; font-family: -apple-system, sans-serif; height: 100vh; overflow: hidden; }
         .page { display: none; flex-direction: column; height: 100vh; width: 100%; position: absolute; top: 0; left: 0; }
@@ -35,27 +35,26 @@
 
 <div id="loading">
     <div class="loader-spin"></div>
-    <div id="loading-text">AIが表を解析中...🔍✨</div>
-    <div style="font-size:11px; margin-top:8px; color:#8b949e;">文字が小さい場合はズームした写真を推奨します</div>
+    <div id="loading-text">iSPEED画像をスキャン中...📊✨</div>
 </div>
 
 <div id="page-list" class="page active">
     <div class="header">
-        <div class="header-title">📊 株管理 ＆ 黄金ルールAI v13.6</div>
+        <div class="header-title">📊 株管理 ＆ 黄金ルールAI v13.7</div>
         <button style="font-size:10px; background:#da3633; color:white; border:none; padding:6px 10px; border-radius:6px;" onclick="clearAllData()">リセット</button>
     </div>
     <div class="import-section">
-        <label class="ocr-label-btn">📸 ズームしたスクショで銘柄登録
+        <label class="ocr-label-btn">📸 アプリのスクショで一括登録
             <input type="file" id="ocr-input" accept="image/*" multiple style="display:none;" onchange="importFromImages(this)">
         </label>
-        <div style="font-size:10px; color:#8b949e; margin-top:8px;">※表の文字が大きく写っていると成功しやすいです</div>
+        <div style="font-size:10px; color:#8b949e; margin-top:8px;">楽天証券アプリの「保有銘柄」画面が最適です！</div>
     </div>
     <div id="stock-list-container" class="stock-list-container"></div>
 </div>
 
 <div id="page-chat" class="page">
     <div class="header">
-        <button onclick="showPage('page-list')" style="background:none; border:none; color:#58a6ff; font-size:14px; cursor:pointer;">◀ 戻る</button>
+        <button onclick="showPage('page-list')" style="background:none; border:none; color:#58a6ff; font-size:14px;">◀ 戻る</button>
         <div id="chat-header-title" class="header-title">分析</div>
         <div style="width:40px;"></div>
     </div>
@@ -63,10 +62,10 @@
     <div class="chat-controls">
         <textarea id="user-text" rows="2" placeholder="質問を入力..."></textarea>
         <div class="chat-btns" style="display:flex; gap:10px; margin-top:10px;">
-            <label class="action-btn" style="flex:1; background:#30363d; text-align:center; padding:12px;">📸 チャート画像選択
+            <label class="action-btn" style="flex:1; background:#30363d; text-align:center; padding:12px;">📸 チャート画像
                 <input type="file" id="chat-image" accept="image/*" style="display:none;" onchange="updateChatFileStatus(this)">
             </label>
-            <button class="action-btn" style="flex:1; background:#2962ff; color:white; font-weight:bold; border:none;" onclick="handleSend()">分析スタート！</button>
+            <button class="action-btn" style="flex:1; background:#2962ff; color:white; font-weight:bold; border:none;" onclick="handleSend()">分析開始</button>
         </div>
         <div id="chat-file-ok" style="font-size:11px; color:#aff5b4; text-align:center; margin-top:5px;"></div>
     </div>
@@ -74,7 +73,7 @@
 
 <script>
     const API_KEY = 'AIzaSyBa2SEsc_y-ooTnXUwKjVORk8gvKOwtbsg';
-    const STORAGE_KEY = 'stock_app_v13_6_final';
+    const STORAGE_KEY = 'stock_app_v13_7_ispeed';
     let appData = JSON.parse(localStorage.getItem(STORAGE_KEY)) || { stocks: [] };
     let currentStock = null;
     let selectedChatFile = null;
@@ -82,7 +81,7 @@
     function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(appData)); }
     function showPage(id) { document.querySelectorAll('.page').forEach(p => p.classList.remove('active')); document.getElementById(id).classList.add('active'); }
 
-    // --- 銘柄抽出の強化プロンプト ---
+    // --- 解析ロジック ---
     async function importFromImages(input) {
         const files = Array.from(input.files);
         if (files.length === 0) return;
@@ -95,15 +94,12 @@
 
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
-            loadingText.innerText = `${files.length}枚中 ${i+1}枚目を深層スキャン中...🔍`;
+            loadingText.innerText = `${files.length}枚中 ${i+1}枚目を解析中...🔍`;
             
             try {
-                // プロンプトを大幅強化：表形式であることを明示
-                const prompt = `あなたは証券会社の書類を読み取る専門家です。
-                画像内の表（特に「国内株式」などのセクション）から、銘柄名と4桁の銘柄コードを1つ残らず抽出してください。
-                銘柄コードは数字4桁です。銘柄名が複雑な漢字でも正確に読み取ってください。
-                
-                出力は必ず以下のJSON形式のみとし、解説や挨拶は一切含めないでください：
+                const prompt = `この画像は楽天証券アプリ「iSPEED」の保有銘柄画面です。
+                黒い背景に白文字で書かれた「銘柄名」と、そのすぐ下にある「4桁の数字（銘柄コード）」をペアですべて抽出してください。
+                出力形式は必ず以下のJSON形式のみとし、他のテキストは一切含めないでください。
                 {"results": [{"name": "銘柄名", "code": "4桁の数字"}]}`;
 
                 const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`, {
@@ -116,20 +112,18 @@
                 const parsed = JSON.parse(jsonText);
                 
                 parsed.results.forEach(s => {
-                    // コードが数字4桁であることを確認しつつ登録
-                    if (s.code && s.code.length >= 4 && !appData.stocks.some(existing => existing.code === s.code.substring(0,4))) {
-                        appData.stocks.push({ id: Date.now() + Math.random(), name: s.name, code: s.code.substring(0,4) });
+                    const cleanCode = s.code.replace(/[^0-9]/g, '').substring(0,4);
+                    if (cleanCode.length === 4 && !appData.stocks.some(existing => existing.code === cleanCode)) {
+                        appData.stocks.push({ id: Date.now() + Math.random(), name: s.name, code: cleanCode });
                         totalAdded++;
                     }
                 });
-            } catch (e) {
-                console.error("解析エラー:", e);
-            }
+            } catch (e) { console.error(e); }
         }
 
         save(); render();
         loading.style.display = 'none';
-        alert(`合計 ${totalAdded}件の銘柄を新しく登録しました！✨`);
+        alert(`${totalAdded}件の銘柄を登録しました！💪✨`);
         input.value = "";
     }
 
@@ -138,25 +132,25 @@
         container.innerHTML = appData.stocks.map(s => `
             <div class="stock-item">
                 <div class="stock-name" onclick="openConsult('${s.name}', '${s.code}')">${s.name}</div>
-                <div style="font-size:12px; color:#8b949e;">証券コード: ${s.code}</div>
+                <div style="font-size:12px; color:#8b949e;">${s.code}</div>
                 <div class="item-controls">
-                    <button class="action-btn" style="border-color:#58a6ff; color:#58a6ff;" onclick="openConsult('${s.name}', '${s.code}')">📈 黄金ルール相談室</button>
+                    <button class="action-btn" style="border-color:#58a6ff; color:#58a6ff;" onclick="openConsult('${s.name}', '${s.code}')">📝 黄金ルール分析</button>
                     <button class="action-btn" onclick="deleteStock(${s.id})">🗑 削除</button>
                 </div>
             </div>
-        `).join('') + (appData.stocks.length === 0 ? '<div style="padding:40px; text-align:center; color:#8b949e; line-height:1.6;">銘柄がまだ登録されていません。<br>PDFをズームしたスクショを読み込むか、<br>手動で追加してください。</div>' : '');
+        `).join('') + (appData.stocks.length === 0 ? '<div style="padding:40px; text-align:center; color:#8b949e;">銘柄がありません。スクショから読み込んでください📸</div>' : '');
     }
 
     function openConsult(name, code) {
         currentStock = { name, code };
         document.getElementById('chat-header-title').innerText = `${name} (${code})`;
-        document.getElementById('chat-messages').innerHTML = `<div class="ai-msg">「${name}」の分析準備ができました！📊✨<br>楽天証券のチャート画像を送ってください。<br>黄金ルールを脳内で適用して解説します！</div>`;
+        document.getElementById('chat-messages').innerHTML = `<div class="ai-msg">「${name}」ですね！了解です👍<br>チャートのスクショを送ってください。黄金ルールでチェックします！</div>`;
         showPage('page-chat');
     }
 
     function updateChatFileStatus(input) {
         selectedChatFile = input.files[0];
-        document.getElementById('chat-file-ok').innerText = selectedChatFile ? "✅ 画像の準備OK！" : "";
+        document.getElementById('chat-file-ok').innerText = selectedChatFile ? "✅ 画像セット完了" : "";
     }
 
     async function handleSend() {
@@ -165,7 +159,7 @@
         const messages = document.getElementById('chat-messages');
         const loading = document.getElementById('loading');
 
-        const userText = textInput.value || "このチャートを分析して！";
+        const userText = textInput.value || "このチャートを黄金ルールで分析して！";
         const userDiv = document.createElement('div'); userDiv.className = 'user-msg'; userDiv.textContent = userText;
         const img = document.createElement('img'); img.className = 'preview-img'; img.src = URL.createObjectURL(selectedChatFile);
         userDiv.appendChild(img); messages.appendChild(userDiv);
@@ -174,10 +168,7 @@
         messages.scrollTop = messages.scrollHeight;
 
         try {
-            const prompt = `あなたは投資初心者に対して教えるプロのテクニカルアナリストです。
-            銘柄：${currentStock.name} (${currentStock.code}) の分析。
-            画像から黄金ルール（GMMA、ボリバン、RSI等）を推測し、今後の展開と戦略を答えてください。`;
-            
+            const prompt = `銘柄：${currentStock.name} (${currentStock.code})。黄金ルール（GMMA、ボリバン、RSI等）でチャートを分析し、戦略を提案してください。`;
             const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -186,7 +177,7 @@
             const data = await response.json();
             const aiDiv = document.createElement('div'); aiDiv.className = 'ai-msg'; aiDiv.textContent = data.candidates[0].content.parts[0].text;
             messages.appendChild(aiDiv);
-        } catch (e) { alert("通信エラーが発生しました💦"); }
+        } catch (e) { alert("エラーが起きました💦"); }
         finally {
             loading.style.display = 'none';
             selectedChatFile = null;
@@ -197,8 +188,8 @@
     }
 
     const toBase64 = f => new Promise((res, rej) => { const r = new FileReader(); r.readAsDataURL(f); r.onload = () => res(r.result); });
-    function clearAllData() { if (confirm("銘柄リストをすべて削除してリセットしますか？")) { localStorage.removeItem(STORAGE_KEY); location.reload(); } }
-    function deleteStock(id) { if (confirm("この銘柄を削除しますか？")) { appData.stocks = appData.stocks.filter(s => s.id !== id); save(); render(); } }
+    function clearAllData() { if (confirm("すべて消去しますか？")) { localStorage.removeItem(STORAGE_KEY); location.reload(); } }
+    function deleteStock(id) { if (confirm("削除しますか？")) { appData.stocks = appData.stocks.filter(s => s.id !== id); save(); render(); } }
 
     render();
 </script>
