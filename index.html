@@ -3,97 +3,360 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>株管理 ＆ 黄金ルールAI v15.0</title>
+    <title>株管理 ＆ 黄金ルールAI v14</title>
     <style>
-        body { margin: 0; background-color: #0d1117; color: #e6edf3; font-family: -apple-system, sans-serif; }
-        .header { padding: 15px; background: #161b22; border-bottom: 1px solid #30363d; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
-        .header-title { font-weight: bold; color: #58a6ff; }
+        body { margin: 0; background-color: #0d1117; color: #e6edf3; font-family: -apple-system, sans-serif; height: 100vh; overflow: hidden; }
+        .page { display: none; flex-direction: column; height: 100vh; width: 100%; position: absolute; top: 0; left: 0; }
+        .page.active { display: flex; }
+        .header { padding: 12px 15px; background: #161b22; border-bottom: 1px solid #30363d; display: flex; justify-content: space-between; align-items: center; }
+        .header-title { font-weight: bold; color: #58a6ff; font-size: 14px; }
         
-        .upload-zone { padding: 20px; background: #1c2128; border-bottom: 1px solid #30363d; text-align: center; }
-        .btn-csv { display: block; padding: 15px; background: #1f6feb; color: white; border-radius: 8px; font-weight: bold; cursor: pointer; border: none; font-size: 15px; width: 100%; }
+        .import-section { padding: 12px 15px; background: #1c2128; border-bottom: 1px solid #30363d; display: flex; flex-direction: column; gap: 8px; }
         
-        .stock-card { background: #161b22; margin: 10px; padding: 15px; border-radius: 10px; border: 1px solid #30363d; }
-        .stock-name { font-weight: bold; color: #58a6ff; font-size: 16px; margin-bottom: 10px; display: block; }
-        .grid-data { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 12px; }
-        .label { color: #8b949e; }
-        .value { text-align: right; font-family: monospace; }
+        /* インポートボタン行 */
+        .import-row { display: flex; gap: 8px; }
+        .import-btn { flex: 1; padding: 11px 8px; border-radius: 8px; font-weight: bold; text-align: center; cursor: pointer; border: none; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+        .btn-image { background: #238636; color: white; }
+        .btn-csv   { background: #1f6feb; color: white; }
+        .btn-manual{ background: #21262d; color: #58a6ff; border: 1px solid #388bfd; font-size: 12px; padding: 9px 8px; }
+
+        /* CSV形式ヒント */
+        .csv-hint { font-size: 10px; color: #8b949e; padding: 6px 10px; background: #0d1117; border-radius: 6px; border: 1px dashed #30363d; line-height: 1.6; }
+        .csv-hint code { color: #79c0ff; font-family: monospace; font-size: 11px; }
+
+        .stock-list-container { flex: 1; overflow-y: auto; padding-bottom: 80px; }
+        .stock-count { font-size: 11px; color: #8b949e; padding: 8px 15px; border-bottom: 1px solid #21262d; }
+        .stock-item { padding: 15px; border-bottom: 1px solid #21262d; display: flex; justify-content: space-between; align-items: center; }
+        .stock-info { flex: 1; }
+        .stock-name { font-weight: bold; font-size: 15px; color: #58a6ff; margin-bottom: 3px; }
+        .stock-code { font-size: 12px; color: #8b949e; }
+        .action-btn { font-size: 11px; padding: 8px 12px; border-radius: 6px; border: 1px solid #30363d; background: #21262d; color: #c9d1d9; cursor: pointer; }
+
+        #loading { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); color: #58a6ff; display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 2000; text-align: center; padding: 20px; box-sizing: border-box; }
+        .loader-spin { width: 40px; height: 40px; border: 4px solid #30363d; border-top: 4px solid #58a6ff; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
-        .how-to { font-size: 11px; color: #8b949e; text-align: left; margin-top: 15px; line-height: 1.6; background: #0d1117; padding: 10px; border-radius: 6px; }
+        /* チャット画面 */
+        #chat-messages { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 15px; background: #0d1117; }
+        .ai-msg { background: #21262d; padding: 15px; border-radius: 15px 15px 15px 5px; border-left: 4px solid #2962ff; align-self: flex-start; max-width: 90%; white-space: pre-wrap; font-size: 14px; line-height: 1.6; }
+        .user-msg { background: #238636; color: white; padding: 12px; border-radius: 15px 15px 5px 15px; align-self: flex-end; max-width: 85%; font-size: 14px; }
+        .preview-img { max-width: 100%; border-radius: 10px; margin-top: 10px; border: 1px solid #30363d; }
+
+        /* CSVプレビューモーダル */
+        #csv-modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:1500; flex-direction:column; justify-content:flex-end; }
+        #csv-modal.open { display:flex; }
+        .csv-modal-inner { background:#161b22; border-radius:16px 16px 0 0; padding:20px; max-height:80vh; display:flex; flex-direction:column; }
+        .csv-modal-title { font-weight:bold; color:#58a6ff; font-size:15px; margin-bottom:4px; }
+        .csv-modal-sub { font-size:11px; color:#8b949e; margin-bottom:14px; }
+        .csv-preview-list { flex:1; overflow-y:auto; margin-bottom:14px; }
+        .csv-row { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid #21262d; font-size:13px; }
+        .csv-row .chk { width:20px; height:20px; accent-color:#58a6ff; cursor:pointer; flex-shrink:0; }
+        .csv-row .code-badge { background:#21262d; color:#79c0ff; border-radius:4px; padding:2px 6px; font-size:12px; font-family:monospace; flex-shrink:0; }
+        .csv-row .dup-badge { background:#30363d; color:#8b949e; border-radius:4px; padding:2px 6px; font-size:10px; flex-shrink:0; }
+        .csv-actions { display:flex; gap:10px; }
+        .csv-cancel { flex:1; padding:12px; background:#21262d; color:#c9d1d9; border:none; border-radius:8px; font-size:14px; cursor:pointer; }
+        .csv-confirm { flex:2; padding:12px; background:#238636; color:white; border:none; border-radius:8px; font-weight:bold; font-size:14px; cursor:pointer; }
+        .sel-all-btn { font-size:11px; color:#58a6ff; background:none; border:none; cursor:pointer; padding:0 0 10px 0; text-align:left; }
     </style>
 </head>
 <body>
 
-<div class="header">
-    <div class="header-title">📊 爆速・確実読み込み v15.0</div>
-    <button style="background:none; border:none; color:#da3633; font-size:12px;" onclick="clearAll()">リセット</button>
+<div id="loading">
+    <div class="loader-spin"></div>
+    <div id="loading-text">銘柄データを抽出中...🚀</div>
+    <div style="font-size:12px; color:#8b949e; margin-top:10px;">これに失敗したら「手動追加」が確実です！</div>
 </div>
 
-<div class="upload-zone">
-    <label class="btn-csv">📁 楽天証券のCSVを選択
-        <input type="file" id="csv-input" accept=".csv" style="display:none;" onchange="handleCSV(this)">
-    </label>
-    
-    <div class="how-to">
-        <strong>💡 100%成功する手順:</strong><br>
-        1. iSPEEDではなく、ブラウザ版「楽天証券」にログイン<br>
-        2. [保有商品一覧] 画面の下にある「CSV保存」を押す<br>
-        3. このアプリでそのファイルを選べば、全銘柄が一瞬で入ります！
+<!-- CSVプレビューモーダル -->
+<div id="csv-modal">
+    <div class="csv-modal-inner">
+        <div class="csv-modal-title">📋 CSVインポート確認</div>
+        <div class="csv-modal-sub" id="csv-modal-sub">0件の銘柄が見つかりました</div>
+        <button class="sel-all-btn" onclick="toggleSelectAll()">▶ 全選択 / 全解除</button>
+        <div class="csv-preview-list" id="csv-preview-list"></div>
+        <div class="csv-actions">
+            <button class="csv-cancel" onclick="closeCsvModal()">キャンセル</button>
+            <button class="csv-confirm" onclick="confirmCsvImport()">選択した銘柄を追加 ✓</button>
+        </div>
     </div>
 </div>
 
-<div id="list-container"></div>
+<div id="page-list" class="page active">
+    <div class="header">
+        <div class="header-title">📈 黄金ルールAI v14</div>
+        <button style="background:none; border:1px solid #da3633; color:#f85149; padding:4px 8px; border-radius:4px; font-size:10px;" onclick="clearAllData()">初期化</button>
+    </div>
+    <div class="import-section">
+        <div class="import-row">
+            <!-- 画像OCR -->
+            <label class="import-btn btn-image">
+                📸 スクショ読込
+                <input type="file" id="ocr-input" accept="image/*" multiple style="display:none;" onchange="importFromImages(this)">
+            </label>
+            <!-- CSV -->
+            <label class="import-btn btn-csv">
+                📄 CSV読込
+                <input type="file" id="csv-input" accept=".csv,text/csv" style="display:none;" onchange="importFromCSV(this)">
+            </label>
+            <!-- 手動 -->
+            <button class="import-btn btn-manual" onclick="manualAdd()">＋ 手動追加</button>
+        </div>
+        <div class="csv-hint">
+            📄 <b>CSVフォーマット例：</b><br>
+            <code>銘柄名,コード</code>（1行目ヘッダー任意）<br>
+            <code>トヨタ自動車,7203</code><br>
+            <code>ソニーグループ,6758</code>
+        </div>
+    </div>
+    <div class="stock-count" id="stock-count">登録銘柄：0件</div>
+    <div id="stock-list-container" class="stock-list-container"></div>
+</div>
+
+<div id="page-chat" class="page">
+    <div class="header">
+        <button onclick="showPage('page-list')" style="background:none; border:none; color:#58a6ff; font-size:14px;">◀ 戻る</button>
+        <div id="chat-header-title" class="header-title">黄金ルール分析</div>
+        <div style="width:40px;"></div>
+    </div>
+    <div id="chat-messages"></div>
+    <div style="padding:15px; background:#161b22; border-top:1px solid #30363d;">
+        <textarea id="user-text" rows="2" style="width:100%; background:#0d1117; color:white; border:1px solid #30363d; padding:10px; border-radius:8px; font-size:16px; box-sizing:border-box;" placeholder="質問があれば入力..."></textarea>
+        <div style="display:flex; gap:10px; margin-top:10px;">
+            <label style="flex:1; background:#30363d; color:white; padding:12px; border-radius:8px; text-align:center; font-size:14px;">📸 チャート
+                <input type="file" id="chat-image" accept="image/*" style="display:none;" onchange="updateChatFileStatus(this)">
+            </label>
+            <button style="flex:1.5; background:#2962ff; color:white; border:none; padding:12px; border-radius:8px; font-weight:bold;" onclick="handleSend()">分析スタート！🚀</button>
+        </div>
+        <div id="chat-file-ok" style="font-size:11px; color:#aff5b4; text-align:center; margin-top:5px;"></div>
+    </div>
+</div>
 
 <script>
-    const STORAGE_KEY = 'stock_csv_v15';
-    let stocks = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+    const API_KEY = 'AIzaSyBa2SEsc_y-ooTnXUwKjVORk8gvKOwtbsg';
+    const STORAGE_KEY = 'stock_v14_csv';
+    let appData = JSON.parse(localStorage.getItem(STORAGE_KEY)) || { stocks: [] };
+    let currentStock = null;
+    let selectedChatFile = null;
+    let csvPendingRows = []; // CSVから読み込んだ未確定行
 
-    function handleCSV(input) {
+    function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(appData)); }
+    function showPage(id) { document.querySelectorAll('.page').forEach(p => p.classList.remove('active')); document.getElementById(id).classList.add('active'); }
+
+    // ===== 画像OCR取込 =====
+    async function importFromImages(input) {
+        const files = Array.from(input.files);
+        if (files.length === 0) return;
+        document.getElementById('loading').style.display = 'flex';
+        let addedCount = 0;
+
+        for (const file of files) {
+            try {
+                const prompt = "画像から株の銘柄名と4桁の数字（コード）を全て見つけ出し、改行区切りで書き出してください。例：トヨタ自動車 7203。余計な説明は不要です。";
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: file.type, data: (await toBase64(file)).split(',')[1] } }] }] })
+                });
+                const data = await response.json();
+                const text = data.candidates[0].content.parts[0].text;
+                const lines = text.split('\n');
+                lines.forEach(line => {
+                    const match = line.match(/(.+?)[\s\t　]?(\d{4})/);
+                    if (match) {
+                        const name = match[1].trim();
+                        const code = match[2].trim();
+                        if (!appData.stocks.some(s => s.code === code)) {
+                            appData.stocks.push({ id: Date.now() + Math.random(), name, code });
+                            addedCount++;
+                        }
+                    }
+                });
+            } catch (e) { console.error(e); }
+        }
+
+        save(); render();
+        document.getElementById('loading').style.display = 'none';
+        alert(`${addedCount}件の銘柄を新しく登録しました！✨`);
+        input.value = "";
+    }
+
+    // ===== CSV取込 =====
+    function importFromCSV(input) {
         const file = input.files[0];
         if (!file) return;
 
         const reader = new FileReader();
-        reader.onload = function(e) {
-            const text = e.target.result;
-            // 楽天証券のCSVはShift-JISなので文字化け対策（本来はライブラリが必要ですが簡易対応）
-            const lines = text.split('\n');
-            const newStocks = [];
+        reader.onload = (e) => {
+            // Shift-JIS / UTF-8 両対応
+            let text = e.target.result;
+            const rows = text.split(/\r?\n/).filter(r => r.trim() !== '');
+            csvPendingRows = [];
 
-            // 楽天のCSVフォーマットに合わせて解析（簡易版）
-            for (let i = 1; i < lines.length; i++) {
-                const col = lines[i].split(',');
-                if (col.length > 5) {
-                    newStocks.push({
-                        code: col[1]?.replace(/"/g, ''),
-                        name: col[2]?.replace(/"/g, ''),
-                        quantity: col[4]?.replace(/"/g, ''),
-                        avgPrice: col[5]?.replace(/"/g, ''),
-                        currentPrice: col[7]?.replace(/"/g, '')
-                    });
+            rows.forEach((row, idx) => {
+                // カンマ区切り or タブ区切りを両対応
+                const cols = row.split(/[,\t]/).map(c => c.trim().replace(/^["']|["']$/g, ''));
+                if (cols.length < 2) return;
+
+                // コードが4桁数字かチェック（どちらの列にあるか自動判定）
+                let name = '', code = '';
+                const col0is4digit = /^\d{4}$/.test(cols[0]);
+                const col1is4digit = /^\d{4}$/.test(cols[1]);
+
+                if (col0is4digit && !col1is4digit) {
+                    code = cols[0]; name = cols[1];
+                } else if (col1is4digit) {
+                    name = cols[0]; code = cols[1];
+                } else {
+                    return; // コードが見つからない行はスキップ
                 }
+
+                // ヘッダー行スキップ（"コード"や"code"を含む行）
+                if (/コード|code|銘柄|symbol/i.test(name) || /コード|code|銘柄|symbol/i.test(code)) return;
+                if (!name || !code) return;
+
+                const isDup = appData.stocks.some(s => s.code === code);
+                csvPendingRows.push({ name, code, isDup });
+            });
+
+            if (csvPendingRows.length === 0) {
+                alert("読み込める銘柄データが見つかりませんでした。\nフォーマット：銘柄名,コード（4桁）");
+                input.value = "";
+                return;
             }
-            stocks = newStocks.filter(s => s.code && !isNaN(s.code));
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(stocks));
-            render();
-            alert(`${stocks.length}件の銘柄を100%正確に読み込みました！`);
+
+            openCsvModal();
         };
-        reader.readAsText(file, "Shift-JIS");
+
+        // Shift-JIS対応のためbinaryStringで読み込みバイナリ変換
+        reader.readAsText(file, 'UTF-8');
+        input.value = "";
     }
 
+    function openCsvModal() {
+        const list = document.getElementById('csv-preview-list');
+        const sub = document.getElementById('csv-modal-sub');
+        const newCount = csvPendingRows.filter(r => !r.isDup).length;
+        const dupCount = csvPendingRows.filter(r => r.isDup).length;
+        sub.textContent = `${csvPendingRows.length}件検出（新規:${newCount}件 / 重複:${dupCount}件）`;
+
+        list.innerHTML = csvPendingRows.map((row, i) => `
+            <div class="csv-row">
+                <input type="checkbox" class="chk" id="csv-chk-${i}" ${row.isDup ? '' : 'checked'} ${row.isDup ? 'title="すでに登録済み"' : ''}>
+                <span class="code-badge">${row.code}</span>
+                <span style="flex:1; color:${row.isDup ? '#8b949e' : '#e6edf3'}">${row.name}</span>
+                ${row.isDup ? '<span class="dup-badge">登録済</span>' : ''}
+            </div>
+        `).join('');
+
+        document.getElementById('csv-modal').classList.add('open');
+    }
+
+    function closeCsvModal() {
+        document.getElementById('csv-modal').classList.remove('open');
+        csvPendingRows = [];
+    }
+
+    function toggleSelectAll() {
+        const checkboxes = document.querySelectorAll('#csv-preview-list .chk');
+        const allChecked = Array.from(checkboxes).every(c => c.checked);
+        checkboxes.forEach(c => c.checked = !allChecked);
+    }
+
+    function confirmCsvImport() {
+        let addedCount = 0;
+        csvPendingRows.forEach((row, i) => {
+            const chk = document.getElementById(`csv-chk-${i}`);
+            if (chk && chk.checked && !appData.stocks.some(s => s.code === row.code)) {
+                appData.stocks.push({ id: Date.now() + Math.random(), name: row.name, code: row.code });
+                addedCount++;
+            }
+        });
+        save(); render();
+        closeCsvModal();
+        if (addedCount > 0) alert(`${addedCount}件の銘柄を登録しました！✨`);
+        else alert("新規追加はありませんでした。");
+    }
+
+    // ===== 手動追加 =====
+    function manualAdd() {
+        const name = prompt("銘柄名を入力してください（例：ヤマハ発動機）");
+        if (!name) return;
+        const code = prompt("4桁のコードを入力してください（例：7272）");
+        if (!code || !/^\d{4}$/.test(code)) { alert("コードは4桁の数字で入力してください。"); return; }
+        appData.stocks.push({ id: Date.now() + Math.random(), name, code });
+        save(); render();
+    }
+
+    // ===== 描画 =====
     function render() {
-        const container = document.getElementById('list-container');
-        container.innerHTML = stocks.map(s => `
-            <div class="stock-card">
-                <span class="stock-name">${s.name} (${s.code})</span>
-                <div class="grid-data">
-                    <span class="label">保有数</span><span class="value">${Number(s.quantity).toLocaleString()} 株</span>
-                    <span class="label">取得単価</span><span class="value">${Number(s.avgPrice).toLocaleString()} 円</span>
-                    <span class="label">現在値</span><span class="value">${Number(s.currentPrice).toLocaleString()} 円</span>
+        const container = document.getElementById('stock-list-container');
+        document.getElementById('stock-count').textContent = `登録銘柄：${appData.stocks.length}件`;
+        container.innerHTML = appData.stocks.map(s => `
+            <div class="stock-item">
+                <div class="stock-info" onclick="openConsult('${s.name}', '${s.code}')">
+                    <div class="stock-name">${s.name}</div>
+                    <div class="stock-code">コード: ${s.code}</div>
+                </div>
+                <div style="display:flex; gap:10px;">
+                    <button class="action-btn" style="border-color:#58a6ff; color:#58a6ff;" onclick="openConsult('${s.name}', '${s.code}')">分析 📈</button>
+                    <button class="action-btn" onclick="deleteStock(${s.id})">🗑</button>
                 </div>
             </div>
-        `).join('') || '<p style="text-align:center; color:#8b949e; margin-top:50px;">CSVファイルを読み込んでください</p>';
+        `).join('') + (appData.stocks.length === 0
+            ? '<div style="padding:50px; text-align:center; color:#8b949e; font-size:13px;">スクショ・CSVを読み込むか、<br>手動ボタンで銘柄を登録してください📸</div>'
+            : '');
     }
 
-    function clearAll() { if(confirm("消去しますか？")) { localStorage.removeItem(STORAGE_KEY); stocks = []; render(); } }
+    function openConsult(name, code) {
+        currentStock = { name, code };
+        document.getElementById('chat-header-title').innerText = `${name} (${code})`;
+        document.getElementById('chat-messages').innerHTML = `<div class="ai-msg">「${name}」ですね！\n楽天証券のチャート画像をアップロードしてください。黄金ルールで勝率を分析します！📊</div>`;
+        showPage('page-chat');
+    }
+
+    function updateChatFileStatus(input) {
+        selectedChatFile = input.files[0];
+        document.getElementById('chat-file-ok').innerText = selectedChatFile ? "✅ チャート画像OK！" : "";
+    }
+
+    async function handleSend() {
+        if (!selectedChatFile) { alert("チャート画像を選んでくださいね！📸"); return; }
+        const textInput = document.getElementById('user-text');
+        const messages = document.getElementById('chat-messages');
+        const loading = document.getElementById('loading');
+
+        const userText = textInput.value || "黄金ルールで分析して！";
+        const userDiv = document.createElement('div'); userDiv.className = 'user-msg'; userDiv.textContent = userText;
+        const img = document.createElement('img'); img.className = 'preview-img'; img.src = URL.createObjectURL(selectedChatFile);
+        userDiv.appendChild(img); messages.appendChild(userDiv);
+        
+        loading.style.display = 'flex';
+        messages.scrollTop = messages.scrollHeight;
+
+        try {
+            const prompt = `あなたは「黄金ルール」の投資顧問です。銘柄：${currentStock.name} (${currentStock.code}) のチャート画像から、GMMA、ボリンジャーバンド、RSI等のテクニカル指標を読み取り、今後の予測と戦略をズバッと回答してください。`;
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: selectedChatFile.type, data: (await toBase64(selectedChatFile)).split(',')[1] } }] }] })
+            });
+            const data = await response.json();
+            const aiDiv = document.createElement('div'); aiDiv.className = 'ai-msg'; aiDiv.textContent = data.candidates[0].content.parts[0].text;
+            messages.appendChild(aiDiv);
+        } catch (e) { alert("エラーが発生しました💦"); }
+        finally {
+            loading.style.display = 'none';
+            selectedChatFile = null;
+            document.getElementById('chat-file-ok').innerText = "";
+            textInput.value = "";
+            messages.scrollTop = messages.scrollHeight;
+        }
+    }
+
+    const toBase64 = f => new Promise((res, rej) => { const r = new FileReader(); r.readAsDataURL(f); r.onload = () => res(r.result); });
+    function clearAllData() { if (confirm("銘柄リストをすべて削除しますか？")) { localStorage.removeItem(STORAGE_KEY); location.reload(); } }
+    function deleteStock(id) { if (confirm("この銘柄を削除しますか？")) { appData.stocks = appData.stocks.filter(s => s.id != id); save(); render(); } }
+
     render();
 </script>
 </body>
