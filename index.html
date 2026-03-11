@@ -140,7 +140,24 @@
     let csvPendingRows = []; // CSVから読み込んだ未確定行
 
     function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(appData)); }
-    function showPage(id) { document.querySelectorAll('.page').forEach(p => p.classList.remove('active')); document.getElementById(id).classList.add('active'); }
+
+    // ===== ページ管理 + スマホ戻るボタン対応 =====
+    function showPage(id) {
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        if (id === 'page-chat') {
+            // チャット画面に移動したとき、戻るボタン用の履歴を積む
+            history.pushState({ page: 'page-list' }, '');
+        }
+    }
+    // スマホの物理戻るボタン / ブラウザバック
+    window.addEventListener('popstate', (e) => {
+        const chatPage = document.getElementById('page-chat');
+        if (chatPage.classList.contains('active')) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById('page-list').classList.add('active');
+        }
+    });
 
     // ===== 画像OCR取込 =====
     async function importFromImages(input) {
@@ -192,30 +209,50 @@
             const rows = text.split(/\r?\n/).filter(r => r.trim() !== '');
             csvPendingRows = [];
 
+            // ヘッダー行を解析して列インデックスを特定
+            let codeColIdx = -1, nameColIdx = -1;
+            const firstRow = rows[0] ? rows[0].split(/[,\t]/).map(c => c.trim().replace(/^["']|["']$/g, '')) : [];
+            firstRow.forEach((h, i) => {
+                if (/コード|code|銘柄コード|ticker/i.test(h)) codeColIdx = i;
+                if (/銘柄名|name|銘柄$|会社名/i.test(h)) nameColIdx = i;
+            });
+
+            const startIdx = (codeColIdx >= 0 || nameColIdx >= 0) ? 1 : 0; // ヘッダーがあれば1行目をスキップ
+
             rows.forEach((row, idx) => {
-                // カンマ区切り or タブ区切りを両対応
+                if (idx < startIdx) return;
                 const cols = row.split(/[,\t]/).map(c => c.trim().replace(/^["']|["']$/g, ''));
                 if (cols.length < 2) return;
 
-                // コードが4桁数字かチェック（どちらの列にあるか自動判定）
                 let name = '', code = '';
-                const col0is4digit = /^\d{4}$/.test(cols[0]);
-                const col1is4digit = /^\d{4}$/.test(cols[1]);
 
-                if (col0is4digit && !col1is4digit) {
-                    code = cols[0]; name = cols[1];
-                } else if (col1is4digit) {
-                    name = cols[0]; code = cols[1];
+                if (codeColIdx >= 0 && nameColIdx >= 0) {
+                    // ヘッダーで列が特定できた場合
+                    code = cols[codeColIdx] || '';
+                    name = cols[nameColIdx] || '';
                 } else {
-                    return; // コードが見つからない行はスキップ
+                    // ヘッダーなし：全列から4桁数字を探す
+                    let foundCodeIdx = -1;
+                    cols.forEach((c, i) => { if (/^\d{4}$/.test(c)) foundCodeIdx = i; });
+                    if (foundCodeIdx < 0) return;
+                    code = cols[foundCodeIdx];
+                    // コード列以外で最も長い文字列を銘柄名とする
+                    const candidates = cols.filter((c, i) => i !== foundCodeIdx && c.length > 0 && !/^\d+$/.test(c));
+                    name = candidates.sort((a, b) => b.length - a.length)[0] || '';
                 }
 
-                // ヘッダー行スキップ（"コード"や"code"を含む行）
-                if (/コード|code|銘柄|symbol/i.test(name) || /コード|code|銘柄|symbol/i.test(code)) return;
-                if (!name || !code) return;
+                // ヘッダー文字列が混入した場合スキップ
+                if (/コード|code|銘柄|symbol/i.test(name) && /コード|code|銘柄|symbol/i.test(code)) return;
+                if (!/^\d{4}$/.test(code)) return;
+
+                // 銘柄名が空・汎用的すぎる場合はコードを仮名として使用
+                const genericNames = ['国内株式', '株式', '日本株', '-', '―', ''];
+                if (!name || genericNames.includes(name)) {
+                    name = `銘柄${code}`; // 後でAIで補完
+                }
 
                 const isDup = appData.stocks.some(s => s.code === code);
-                csvPendingRows.push({ name, code, isDup });
+                csvPendingRows.push({ name, code, isDup, needsNameLookup: genericNames.includes(name) || name === `銘柄${code}` });
             });
 
             if (csvPendingRows.length === 0) {
@@ -232,13 +269,42 @@
         input.value = "";
     }
 
-    function openCsvModal() {
-        const list = document.getElementById('csv-preview-list');
+    async function openCsvModal() {
         const sub = document.getElementById('csv-modal-sub');
         const newCount = csvPendingRows.filter(r => !r.isDup).length;
         const dupCount = csvPendingRows.filter(r => r.isDup).length;
         sub.textContent = `${csvPendingRows.length}件検出（新規:${newCount}件 / 重複:${dupCount}件）`;
+        renderCsvList();
+        document.getElementById('csv-modal').classList.add('open');
 
+        // 銘柄名が不明（「銘柄XXXX」）なものをAIで一括補完
+        const needsLookup = csvPendingRows.filter(r => r.needsNameLookup);
+        if (needsLookup.length > 0) {
+            sub.textContent += '　⏳ 銘柄名を取得中...';
+            try {
+                const codeList = needsLookup.map(r => r.code).join(', ');
+                const prompt = `以下の日本株コードの正式な銘柄名を教えてください。コード:銘柄名 の形式で1行ずつ出力してください。余計な説明不要。\n${codeList}`;
+                const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                });
+                const d = await resp.json();
+                const lines = d.candidates[0].content.parts[0].text.split('\n');
+                lines.forEach(line => {
+                    const m = line.match(/(\d{4})[：:]\s*(.+)/);
+                    if (m) {
+                        const idx = csvPendingRows.findIndex(r => r.code === m[1]);
+                        if (idx >= 0) { csvPendingRows[idx].name = m[2].trim(); csvPendingRows[idx].needsNameLookup = false; }
+                    }
+                });
+                renderCsvList();
+                sub.textContent = `${csvPendingRows.length}件検出（新規:${newCount}件 / 重複:${dupCount}件）`;
+            } catch(e) { console.error(e); }
+        }
+    }
+
+    function renderCsvList() {
+        const list = document.getElementById('csv-preview-list');
         list.innerHTML = csvPendingRows.map((row, i) => `
             <div class="csv-row">
                 <input type="checkbox" class="chk" id="csv-chk-${i}" ${row.isDup ? '' : 'checked'} ${row.isDup ? 'title="すでに登録済み"' : ''}>
@@ -247,8 +313,6 @@
                 ${row.isDup ? '<span class="dup-badge">登録済</span>' : ''}
             </div>
         `).join('');
-
-        document.getElementById('csv-modal').classList.add('open');
     }
 
     function closeCsvModal() {
@@ -291,20 +355,29 @@
     function render() {
         const container = document.getElementById('stock-list-container');
         document.getElementById('stock-count').textContent = `登録銘柄：${appData.stocks.length}件`;
-        container.innerHTML = appData.stocks.map(s => `
+        if (appData.stocks.length === 0) {
+            container.innerHTML = '<div style="padding:50px; text-align:center; color:#8b949e; font-size:13px;">スクショ・CSVを読み込むか、<br>手動ボタンで銘柄を登録してください📸</div>';
+            return;
+        }
+        container.innerHTML = appData.stocks.map(s => {
+            const safeId = String(s.id);
+            return `
             <div class="stock-item">
-                <div class="stock-info" onclick="openConsult('${s.name}', '${s.code}')">
-                    <div class="stock-name">${s.name}</div>
-                    <div class="stock-code">コード: ${s.code}</div>
+                <div class="stock-info" data-id="${safeId}" onclick="openConsultById(this.dataset.id)">
+                    <div class="stock-name">${escHtml(s.name)}</div>
+                    <div class="stock-code">コード: ${escHtml(s.code)}</div>
                 </div>
                 <div style="display:flex; gap:10px;">
-                    <button class="action-btn" style="border-color:#58a6ff; color:#58a6ff;" onclick="openConsult('${s.name}', '${s.code}')">分析 📈</button>
-                    <button class="action-btn" onclick="deleteStock(${s.id})">🗑</button>
+                    <button class="action-btn" style="border-color:#58a6ff; color:#58a6ff;" data-id="${safeId}" onclick="openConsultById(this.dataset.id)">分析 📈</button>
+                    <button class="action-btn" data-id="${safeId}" onclick="deleteStock(this.dataset.id)">🗑</button>
                 </div>
-            </div>
-        `).join('') + (appData.stocks.length === 0
-            ? '<div style="padding:50px; text-align:center; color:#8b949e; font-size:13px;">スクショ・CSVを読み込むか、<br>手動ボタンで銘柄を登録してください📸</div>'
-            : '');
+            </div>`;
+        }).join('');
+    }
+    function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    function openConsultById(id) {
+        const s = appData.stocks.find(s => String(s.id) === id);
+        if (s) openConsult(s.name, s.code);
     }
 
     function openConsult(name, code) {
@@ -355,7 +428,7 @@
 
     const toBase64 = f => new Promise((res, rej) => { const r = new FileReader(); r.readAsDataURL(f); r.onload = () => res(r.result); });
     function clearAllData() { if (confirm("銘柄リストをすべて削除しますか？")) { localStorage.removeItem(STORAGE_KEY); location.reload(); } }
-    function deleteStock(id) { if (confirm("この銘柄を削除しますか？")) { appData.stocks = appData.stocks.filter(s => s.id != id); save(); render(); } }
+    function deleteStock(id) { if (confirm("この銘柄を削除しますか？")) { appData.stocks = appData.stocks.filter(s => String(s.id) !== String(id)); save(); render(); } }
 
     render();
 </script>
