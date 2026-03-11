@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>株管理 ＆ 黄金ルールAI v14</title>
     <style>
-        body { margin: 0; background-color: #0d1117; color: #e6edf3; font-family: -apple-system, sans-serif; height: 100vh; overflow: hidden; }
-        .page { display: none; flex-direction: column; height: 100vh; width: 100%; position: absolute; top: 0; left: 0; }
+        body { margin: 0; background-color: #0d1117; color: #e6edf3; font-family: -apple-system, sans-serif; height: 100dvh; overflow: hidden; }
+        .page { display: none; flex-direction: column; height: 100dvh; width: 100%; position: absolute; top: 0; left: 0; }
         .page.active { display: flex; }
         .header { padding: 12px 15px; background: #161b22; border-bottom: 1px solid #30363d; display: flex; justify-content: space-between; align-items: center; }
         .header-title { font-weight: bold; color: #58a6ff; font-size: 14px; }
@@ -119,7 +119,7 @@
         <div style="width:40px;"></div>
     </div>
     <div id="chat-messages"></div>
-    <div style="padding:15px; background:#161b22; border-top:1px solid #30363d;">
+    <div style="padding:15px; background:#161b22; border-top:1px solid #30363d; flex-shrink:0;">
         <textarea id="user-text" rows="2" style="width:100%; background:#0d1117; color:white; border:1px solid #30363d; padding:10px; border-radius:8px; font-size:16px; box-sizing:border-box;" placeholder="質問があれば入力..."></textarea>
         <div style="display:flex; gap:10px; margin-top:10px;">
             <label style="flex:1; background:#30363d; color:white; padding:12px; border-radius:8px; text-align:center; font-size:14px;">📸 チャート
